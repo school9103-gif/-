@@ -95,3 +95,25 @@
 
 .leave-row td:nth-child(n+3){background:#faf9fc}
 .leave-row button:disabled,.leave-row input:disabled{opacity:.5;cursor:not-allowed}
+
+.roster-actions{display:flex;gap:8px;flex-wrap:wrap}
+#roster-dialog{width:min(600px,calc(100% - 32px));max-height:85vh;overflow:auto}
+#roster-list{display:grid;gap:8px;max-height:45vh;overflow:auto}
+.roster-student{display:flex;flex-direction:column;text-align:left;gap:6px;padding:12px;width:100%}
+.roster-student span{font-size:12px;color:#61796e;white-space:normal}
+.roster-unassigned{display:flex;align-items:center;gap:8px}
+.roster-unassigned input{width:18px;height:18px;margin:0}
+
+#student-dialog{width:min(860px,calc(100% - 32px));max-height:85vh;overflow:auto}
+.student-schedule{display:grid;grid-template-columns:2fr minmax(220px,2fr) 1fr 1fr auto;gap:8px;align-items:end;border-bottom:1px solid #d9e3dd;padding-bottom:12px}
+.student-schedule label{margin:10px 0 0;font-size:12px;min-width:0}
+.student-schedule input,.student-schedule select{margin-top:6px;padding:8px;width:100%;min-width:0}
+.student-schedule button{font-size:12px;padding:8px}
+.schedule-days{border:0;margin:10px 0 0;padding:0;min-width:0}
+.schedule-days legend{font-size:12px;margin-bottom:6px;color:#61796e}
+.schedule-day-choice{display:inline-flex;align-items:center;gap:4px;margin:0 4px 6px 0;padding:6px 8px;border:1px solid #d9e3dd;border-radius:8px;background:#fff;font-size:12px;white-space:nowrap}
+.schedule-day-choice input{width:16px;height:16px;margin:0;padding:0}
+#add-student-schedule{margin-top:12px}
+@media(max-width:700px){.student-schedule{grid-template-columns:1fr 1fr}.student-schedule label:first-child,.schedule-days{grid-column:1/-1}}
+
+.class-manage-actions{display:flex;gap:8px;flex-wrap:wrap;margin-block:12px}

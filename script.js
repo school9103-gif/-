@@ -225,14 +225,20 @@ function 當日課次() {
   }
   // 未分班學生仍可記錄；舊紀錄在原日期另外顯示，保留既有歷史。
   for (const [編號,學生] of 學生表) if (!已分班.has(編號) || 資料.days[日]?.[編號]) 結果.set(編號,{key:編號,student:學生,classId:'legacy',department:'未分班／舊紀錄',className:資料.days[日]?.[編號] ? '原有每日紀錄' : '尚未分班',start:'',end:'',legacy:true});
+  // 調整排課後，仍顯示原日期已填寫的課次，避免舊分數與出勤紀錄失去入口。
+  for(const 鍵 of Object.keys(資料.lessonDays[日] || {})){
+    if(結果.has(鍵))continue;
+    const [編號,班號,開始,結束]=鍵.split('|');const 學生=學生表.get(編號);const 班=資料.classes.find(項=>項.id===班號);
+    if(學生 && 班)結果.set(鍵,{key:鍵,student:學生,classId:班.id,department:班.department,className:班級名稱(班)+'（原時段紀錄）',start:開始,end:結束,legacy:false});
+  }
   return [...結果.values()].sort((甲,乙) => 甲.start.localeCompare(乙.start) || 甲.className.localeCompare(乙.className,'zh-Hant') || 甲.student.name.localeCompare(乙.student.name,'zh-Hant'));
 }
 function 設定選單(識別,選項,標籤) { const 下拉 = 取得(識別); const 原值 = 下拉.value; 下拉.replaceChildren(); 下拉.append(new Option(標籤,'')); 選項.forEach(([值,名稱]) => 下拉.append(new Option(名稱,值))); 下拉.value = 選項.some(項 => 項[0] === 原值) ? 原值 : ''; }
 // 空值代表全選，空集合代表全部取消。
 let 已選部門=null;
-function 部門符合(名稱){return 已選部門===null || 已選部門.has(名稱);}
+function 部門符合(名稱){return 名稱!=='未分班／舊紀錄' && (已選部門===null || 已選部門.has(名稱));}
 function 更新選單() {
-  const 選項=[...new Set(資料.classes.map(班=>班.department).concat(['未分班／舊紀錄']))];
+  const 選項=[...new Set(資料.classes.map(班=>班.department))];
   const 容器=取得('department-filter');
   if(容器.dataset.options!==JSON.stringify(選項)){
     容器.replaceChildren();容器.dataset.options=JSON.stringify(選項);
@@ -240,7 +246,7 @@ function 更新選單() {
   }
   for(const 勾選 of 容器.querySelectorAll('input'))勾選.checked=部門符合(勾選.value);
   const 班級選項 = 資料.classes.filter(班=>部門符合(班.department)).map(班=>[班.id,班級名稱(班)]);
-  if (部門符合('未分班／舊紀錄')) 班級選項.push(['legacy','未分班／舊紀錄']);
+
   設定選單('class-filter',班級選項,'全部班級');
   const 班號 = 取得('class-filter').value;
   const 時段 = [...new Set(當日課次().filter(課=>(部門符合(課.department)) && (!班號 || 課.classId===班號)).map(課=>課.start ? 課.start+'–'+課.end : '未分時段'))].sort();
@@ -306,7 +312,8 @@ function 顯示名單(焦點) {
   for (const 課 of 顯示) {
     const 記 = 讀取紀錄(課); const 列 = 元素('tr'); const 姓名格 = 元素('td'); const 姓名區 = 元素('div','student-info');
     姓名區.append(元素('span','avatar',課.student.name.slice(-2)));
-    const 姓名 = 元素('button','student-name',課.student.name); 姓名.title='編輯姓名與年級'; 姓名.append(元素('small','',課.student.grade || '未填年級')); 姓名.addEventListener('click',()=>開啟學生(課.student)); 姓名區.append(姓名);
+    const 姓名 = 元素('button','student-name',課.student.name); 姓名.title='編輯姓名、年級與加入班級'; 姓名.append(元素('small','',課.student.grade || '未填年級')); 姓名.addEventListener('click',()=>開啟學生(課.student)); 姓名區.append(姓名);
+    if(課.legacy){const 設定=元素('button','text-button','編輯名單／分班');設定.type='button';設定.addEventListener('click',()=>開啟學生(課.student));姓名區.append(設定);}
     姓名格.append(姓名區,元素('div','lesson-class',課.department+'・'+課.className),元素('div','lesson-time',課.start ? 課.start+'–'+課.end : '未分時段')); 列.append(姓名格);
     for (const 欄 of Object.keys(狀態選項)) {
       const 值 = 記[欄]; const 樣式 = 欄==='exam' ? (值===1?'good':'') : 值===3 ? 'leave' : 欄==='arrival' ? (值>0?'good':'') : 值===2?'good':值===1?'working':'';
@@ -347,21 +354,126 @@ function 顯示名單(焦點) {
   }
   if (焦點) 取得(焦點)?.focus();
 }
+// 名單管理直接使用所有已匯入學生，不依當日排課篩選。
+function 顯示學生總名單(){
+  const 搜尋=取得('roster-search').value.trim();const 僅未分班=取得('roster-unassigned').checked;
+  const 容器=取得('roster-list');容器.replaceChildren();let 筆數=0;
+  for(const 學生 of [...資料.students].sort((甲,乙)=>甲.name.localeCompare(乙.name,'zh-Hant'))){
+    const 班級=資料.classes.filter(班=>班.groups.some(組=>組.studentIds.includes(學生.id)));
+    if((搜尋 && !學生.name.includes(搜尋)) || (僅未分班 && 班級.length))continue;
+    const 按鈕=元素('button','roster-student');按鈕.type='button';
+    按鈕.append(元素('strong','',學生.name+'・'+(學生.grade || '未填年級')),元素('span','',班級.length?班級.map(班級名稱).join('、'):'尚未分班・點選設定班級'));
+    按鈕.addEventListener('click',()=>開啟學生(學生));容器.append(按鈕);筆數++;
+  }
+  取得('roster-count').textContent='顯示 '+筆數+' 位學生';
+  if(!筆數)容器.append(元素('p','','沒有符合條件的學生。請調整搜尋或取消未分班篩選；尚未匯入者需先匯入名單。'));
+}
+取得('show-roster').addEventListener('click',()=>{取得('roster-search').value='';取得('roster-unassigned').checked=false;顯示學生總名單();取得('roster-dialog').showModal();取得('roster-search').focus();});
+取得('close-roster').addEventListener('click',()=>取得('roster-dialog').close());
+取得('roster-search').addEventListener('input',顯示學生總名單);
+取得('roster-unassigned').addEventListener('change',顯示學生總名單);
+let 修改班級模式=false;
+function 顯示班級名稱設定(){
+  const 班=資料.classes.find(項=>項.id===取得('class-choice').value);
+  取得('class-name').value=班?.name || '';取得('class-department').value=班?.department || '安親';
+}
+function 填入班級選項(下拉,原值=''){
+  下拉.replaceChildren(new Option('請選既有班級',''));
+  資料.classes.forEach(項=>下拉.append(new Option(項.department+'・'+班級名稱(項),項.id)));
+  下拉.value=原值;
+}
+function 開啟班級設定(修改){
+  if(修改 && !資料.classes.length){通知('目前沒有班級，請先新增。');return;}
+  修改班級模式=修改;取得('class-editor-title').textContent=修改?'修改班級名稱':'新增班級';
+  取得('class-choice-field').hidden=!修改;取得('class-department').disabled=修改;
+  取得('class-choice').replaceChildren();資料.classes.forEach(班=>取得('class-choice').append(new Option(班.department+'・'+班級名稱(班),班.id)));
+  if(修改)顯示班級名稱設定();else{取得('class-name').value='';取得('class-department').value='安親';}
+  取得('class-editor-help').textContent=修改?'更名會立即套用至所有學生與每週課表，原有時段與紀錄保持不變。':'儲存後會加入一列上課時段，請設定星期與時間，再按「儲存學生」。班級會獨立保存。';
+  取得('class-editor').showModal();取得('class-name').focus();
+}
+取得('create-class').addEventListener('click',()=>開啟班級設定(false));
+取得('rename-class').addEventListener('click',()=>開啟班級設定(true));
+取得('close-class-editor').addEventListener('click',()=>取得('class-editor').close());
+取得('class-choice').addEventListener('change',顯示班級名稱設定);
+取得('class-editor-form').addEventListener('submit',事件=>{
+  事件.preventDefault();const 名稱=取得('class-name').value.trim();if(!名稱){通知('請填寫班級名稱。');return;}
+  const 原班級=JSON.parse(JSON.stringify(資料.classes));
+  let 班=修改班級模式?資料.classes.find(項=>項.id===取得('class-choice').value):null;
+  if(修改班級模式 && !班){通知('找不到班級，請重新選擇。');return;}
+  const 部門=班?.department || 取得('class-department').value;
+  const 同名原班級=修改班級模式?資料.classes.filter(項=>項.department===部門 && 項.name===班.name):[];
+  if(資料.classes.some(項=>項.department===部門 && 項.name===名稱 && !同名原班級.some(原=>原.id===項.id))){通知('此部門已有相同班級名稱，請使用不同名稱。');return;}
+  if(修改班級模式)同名原班級.forEach(項=>項.name=名稱);
+  else{班={id:'cmanual'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),name:名稱,department:部門,groups:[]};資料.classes.push(班);}
+  if(!保存()){資料.classes=原班級;return;}
+  // 更新下拉名稱時保留正在編輯的班級、星期與時間。
+  for(const 下拉 of 取得('student-schedules').querySelectorAll('.schedule-class')){
+    填入班級選項(下拉,下拉.value);
+  }
+  if(!修改班級模式)新增學生時段(班.id);
+  顯示名單();if(取得('roster-dialog').open)顯示學生總名單();取得('class-editor').close();通知(修改班級模式?'同名班級名稱已一起更新。':'班級已新增，請設定星期與時間後儲存學生。');
+});
+function 新增學生時段(班號='',時={days:[],start:'',end:''}){
+  const 列=元素('div','student-schedule');
+  function 欄位(名稱,控制){const 標籤=元素('label','',名稱);標籤.append(控制);列.append(標籤);return 控制;}
+  const 班=欄位('選擇既有班級',document.createElement('select'));班.className='schedule-class';填入班級選項(班,班號);
+  const 已選星期=new Set((時.days || (時.day?[時.day]:[])).map(Number));
+  const 星期組=元素('fieldset','schedule-days');星期組.append(元素('legend','','星期'));
+  ['一','二','三','四','五','六','日'].forEach((名,序)=>{
+    const 選項=元素('label','schedule-day-choice');const 勾選=document.createElement('input');
+    勾選.type='checkbox';勾選.className='schedule-day';勾選.value=String(序+1);勾選.checked=已選星期.has(序+1);
+    選項.append(勾選,document.createTextNode('週'+名));星期組.append(選項);
+  });
+  列.append(星期組);
+  for(const [鍵,名稱] of [['start','開始'],['end','結束']]){const 時間=欄位(名稱,document.createElement('input'));時間.type='time';時間.className='schedule-'+鍵;時間.value=時[鍵];}
+  const 移除=元素('button','','取消此時段');移除.type='button';移除.addEventListener('click',()=>列.remove());列.append(移除);取得('student-schedules').append(列);
+}
+取得('add-student-schedule').addEventListener('click',()=>新增學生時段());
+function 合併學生時段(學生){
+  const 合併=new Map();
+  for(const 班 of 資料.classes)for(const 組 of 班.groups)if(組.studentIds.includes(學生.id))for(const 時 of 組.slots){
+    const 鍵=班.id+'|'+時.start+'|'+時.end;
+    if(!合併.has(鍵))合併.set(鍵,{班號:班.id,時:{days:[],start:時.start,end:時.end}});
+    合併.get(鍵).時.days.push(時.day);
+  }
+  return [...合併.values()];
+}
 function 開啟學生(學生) {
-  編輯編號=學生?.id || null;取得('dialog-title').textContent=學生?'編輯學生資料':'新增學生';取得('student-name').value=學生?.name || '';取得('student-grade').value=學生?.grade || '';
-  取得('student-enrollment-field').hidden=Boolean(學生);
-  設定選單('student-enrollment',資料.classes.flatMap(班=>班.groups.map((組,序)=>[班.id+':'+序,班級名稱(班)+'・'+每週文字(組.slots)])),'先不分班');
-  取得('student-enrollment').value='';取得('student-dialog').showModal();取得('student-name').focus();
+  編輯編號=學生?.id || null;取得('dialog-title').textContent=學生?'編輯學生資料與課表':'新增學生';取得('student-name').value=學生?.name || '';取得('student-grade').value=學生?.grade || '';
+  取得('student-schedules').replaceChildren();
+  const 時段列=學生?合併學生時段(學生):[];
+  if(時段列.length)時段列.forEach(項=>新增學生時段(項.班號,項.時));
+  else 新增學生時段();
+  取得('student-dialog').showModal();取得('student-name').focus();
 }
 取得('add-student').addEventListener('click',()=>開啟學生());
 取得('close-dialog').addEventListener('click',()=>取得('student-dialog').close());
 取得('student-form').addEventListener('submit',事件=>{
   事件.preventDefault();const 姓名=取得('student-name').value.trim();if(!姓名)return;
-  if (編輯編號) Object.assign(資料.students.find(人=>人.id===編輯編號),{name:姓名,grade:取得('student-grade').value.trim()});
-  else {const 學生={id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value};資料.students.push(學生);
-    if(取得('student-enrollment').value){const [班,組]=取得('student-enrollment').value.split(':');資料.classes.find(項=>項.id===班).groups[Number(組)].studentIds.push(學生.id);}
+  const 課表=[];
+  for(const 列 of 取得('student-schedules').children){
+    const 班號=列.querySelector('.schedule-class').value;
+    const 星期們=[...列.querySelectorAll('.schedule-day:checked')].map(項=>Number(項.value));
+    const 開始=列.querySelector('.schedule-start').value,結束=列.querySelector('.schedule-end').value;
+    if(!班號 && !星期們.length && !開始 && !結束)continue;
+    if(!資料.classes.some(班=>班.id===班號) || !星期們.length || !時間有效(開始) || !時間有效(結束) || 開始>=結束){通知('請選擇班級、星期，並確認結束時間晚於開始時間。');return;}
+    for(const 星期 of 星期們){
+      const 時={day:星期,start:開始,end:結束};
+      if(課表.some(項=>項.時.day===時.day && 項.時.start<時.end && 時.start<項.時.end)){通知('同一學生的上課時段重疊，請先調整。');return;}
+      課表.push({班號,時});
+    }
   }
-  保存();顯示名單();取得('student-dialog').close();
+  const 編號=編輯編號 || 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  if(編輯編號)Object.assign(資料.students.find(人=>人.id===編號),{name:姓名,grade:取得('student-grade').value.trim()});
+  else 資料.students.push({id:編號,name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value});
+  // 只更換這名學生的週課表，同班其他學生仍保留原來的排課。
+  for(const 班 of 資料.classes){
+    for(const 組 of 班.groups)組.studentIds=組.studentIds.filter(人=>人!==編號);
+    班.groups=班.groups.filter(組=>組.studentIds.length);
+    const 時段=課表.filter(項=>項.班號===班.id).map(項=>項.時);
+    if(時段.length)班.groups.push({studentIds:[編號],slots:時段});
+  }
+  保存();顯示名單();取得('student-dialog').close();if(取得('roster-dialog').open)顯示學生總名單();通知('學生班級與每週上課時段已更新。');
 });
 function 換日(差){const 日=new Date(取得('record-date').value+'T12:00:00');日.setDate(日.getDate()+差);const 值=日.getFullYear()+'-'+String(日.getMonth()+1).padStart(2,'0')+'-'+String(日.getDate()).padStart(2,'0');if(日期有效(值)){取得('record-date').value=值;取得('time-filter').value='';顯示名單();}}
 取得('previous-day').addEventListener('click',()=>換日(-1));取得('next-day').addEventListener('click',()=>換日(1));
