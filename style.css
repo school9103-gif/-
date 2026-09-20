@@ -117,3 +117,17 @@
 @media(max-width:700px){.student-schedule{grid-template-columns:1fr 1fr}.student-schedule label:first-child,.schedule-days{grid-column:1/-1}}
 
 .class-manage-actions{display:flex;gap:8px;flex-wrap:wrap;margin-block:12px}
+
+/* 固定訂餐在學生資料設定；每日選單只處理當天例外與用餐完成狀態。 */
+.student-meal-days{margin:22px 0 18px;padding:15px;border:1px solid #d9e3dd;border-radius:12px;background:#fffbef}
+.student-meal-days legend{padding:0 7px;color:#6c5229;font-size:14px;font-weight:700}
+.student-meal-days p{margin:0 0 10px}
+#student-meal-days{display:flex;flex-wrap:wrap;gap:7px}
+#student-meal-days label{display:flex;align-items:center;gap:5px;margin:0;padding:7px 9px;border:1px solid #e8dfc7;border-radius:8px;background:white;cursor:pointer;font-size:12px}
+#student-meal-days input{width:16px;height:16px;margin:0;padding:0;accent-color:#287d67}
+#student-meal-days label:has(input:checked){background:#dff2e9;border-color:#b9ddcd;color:#266b57}
+.meal-select{min-width:104px;padding:9px 28px 9px 10px;border:1px solid #e6ebea;border-radius:8px;background:#f5f7f6;color:#6f7f79;font:inherit;font-size:13px}
+.meal-select.working{color:#986814;background-color:#fff7e6;border-color:#f0dcae}
+.meal-select.good{color:#287d65;background-color:#eaf5ee;border-color:#cce4d7}
+.meal-select.cancelled{color:#777;background-color:#f1f2f2;border-color:#dedede}
+.meal-select:disabled{opacity:.5;cursor:not-allowed}

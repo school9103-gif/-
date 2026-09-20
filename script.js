@@ -151,7 +151,7 @@ function 建立工作台() {
 const 取得 = 識別 => document.getElementById(識別);
 const 空資料 = () => ({ version: 1, students: [], days: {}, classes: [], lessonDays: {}, meals: {} });
 const 狀態選項 = { arrival: ['尚未到班','已到班','已離班','請假'], homework: ['未開始','進行中','已完成','免做'], assessment: ['未開始','進行中','已完成','免做'], exam: ['未開始','已完成'] };
-const 訂餐選項 = ['未訂餐','已訂餐','已用餐'];
+const 訂餐紀錄選項 = ['依固定安排','臨時加訂','已用餐','臨時取消'];
 let 資料 = 空資料();
 let 儲存鍵 = '';
 let 允許儲存 = false;
@@ -177,6 +177,7 @@ function 資料有效(內容) {
   const 編號 = new Set();
   for (const 學生 of 內容.students) {
     if (!學生 || typeof 學生.id !== 'string' || !/^s[\w-]+$/.test(學生.id) || 編號.has(學生.id) || typeof 學生.name !== 'string' || !學生.name.trim() || 學生.name.length > 30 || typeof 學生.grade !== 'string' || 學生.grade.length > 30 || !日期有效(學生.start)) return false;
+    if (學生.mealDays !== undefined && (!Array.isArray(學生.mealDays) || !學生.mealDays.every(星期 => Number.isInteger(星期) && 星期 >= 1 && 星期 <= 7) || new Set(學生.mealDays).size !== 學生.mealDays.length)) return false;
     編號.add(學生.id);
   }
   if (!Object.entries(內容.days).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([人,紀錄]) => 編號.has(人) && 紀錄有效(紀錄)))) return false;
@@ -192,7 +193,7 @@ function 資料有效(內容) {
   }
   // 舊備份沒有訂餐欄位時視為空白；訂餐以日期與學生編號驗證。
   const 訂餐們 = 內容.meals === undefined ? {} : 內容.meals;
-  if (!是物件(訂餐們) || !Object.entries(訂餐們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([人,值]) => 編號.has(人) && Number.isInteger(值) && 值 >= 0 && 值 < 訂餐選項.length))) return false;
+  if (!是物件(訂餐們) || !Object.entries(訂餐們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([人,值]) => 編號.has(人) && Number.isInteger(值) && 值 >= 0 && 值 < 訂餐紀錄選項.length))) return false;
   const 課次們 = 內容.lessonDays === undefined ? {} : 內容.lessonDays;
   return 是物件(課次們) && Object.entries(課次們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([鍵,紀錄]) => {
     const [人,班,起,迄,...其餘] = 鍵.split('|');
@@ -203,9 +204,27 @@ function 保存() { try { if (!允許儲存 || !儲存鍵) throw new Error('未�
 function 預設紀錄() { return {arrival:0,homework:0,assessment:0,exam:0,score:'',note:''}; }
 function 讀取紀錄(課) { const 日 = 取得('record-date').value; return {...預設紀錄(),...(課.legacy ? 資料.days[日]?.[課.student.id] : 資料.lessonDays[日]?.[課.key])}; }
 function 修改紀錄(課,欄,值) { const 日 = 取得('record-date').value; const 容器 = 課.legacy ? 資料.days : 資料.lessonDays; 容器[日] ||= {}; 容器[日][課.legacy ? 課.student.id : 課.key] = {...讀取紀錄(課),[欄]:值}; }
-// 同一位學生當天跨班共用一筆訂餐狀態，避免重複計算餐數。
-function 讀取訂餐(編號) { return 資料.meals[取得('record-date').value]?.[編號] ?? 0; }
-function 切換訂餐(編號) { const 日 = 取得('record-date').value; 資料.meals[日] ||= {}; 資料.meals[日][編號] = (讀取訂餐(編號) + 1) % 訂餐選項.length; }
+// 固定星期是學生設定；當天紀錄只保存臨時加訂、已用餐或臨時取消。
+function 固定訂餐(編號,日=取得('record-date').value) {
+  const 學生=資料.students.find(人=>人.id===編號);const 星期=new Date(日+'T12:00:00').getDay() || 7;
+  return (學生?.mealDays || []).includes(星期);
+}
+function 讀取訂餐紀錄(編號) { return 資料.meals[取得('record-date').value]?.[編號] ?? 0; }
+function 讀取訂餐(編號) {
+  const 紀錄=讀取訂餐紀錄(編號);
+  if(紀錄===1)return 固定訂餐(編號)?{code:1,label:'固定訂餐',ordered:true,eaten:false}:{code:2,label:'臨時加訂',ordered:true,eaten:false};
+  if(紀錄===2)return {code:3,label:'已用餐',ordered:true,eaten:true};
+  if(紀錄===3)return {code:0,label:'臨時取消',ordered:false,eaten:false};
+  return 固定訂餐(編號)?{code:1,label:'固定訂餐',ordered:true,eaten:false}:{code:0,label:'未訂餐',ordered:false,eaten:false};
+}
+function 設定訂餐(編號,值) {
+  const 日=取得('record-date').value;資料.meals[日] ||= {};
+  if(值==='預設')delete 資料.meals[日][編號];else 資料.meals[日][編號]=Number(值);
+  if(!Object.keys(資料.meals[日]).length)delete 資料.meals[日];
+}
+function 訂餐選單內容(編號){
+  return 固定訂餐(編號)?[['預設','固定訂餐'],['2','已用餐'],['3','臨時取消']]:[['預設','未訂餐'],['1','臨時加訂'],['2','已用餐']];
+}
 function 班級名稱(班) { const 同名 = 資料.classes.filter(項 => 項.name === 班.name); return 班.name + (同名.length > 1 ? '（' + (同名.findIndex(項 => 項.id === 班.id)+1) + '）' : ''); }
 function 每週文字(時段) { return 時段.map(時 => '週' + '一二三四五六日'[時.day-1] + ' ' + 時.start + '–' + 時.end).join('、'); }
 function 當日課次() {
@@ -258,7 +277,7 @@ function 排序值(課){
   if(排序欄位==='name')return 課.student.name;
   if(排序欄位==='class')return 課.className;
   if(排序欄位==='time')return 課.start ? 課.start+'–'+課.end : '';
-  if(排序欄位==='meal')return 讀取訂餐(課.student.id);
+  if(排序欄位==='meal')return 讀取訂餐(課.student.id).code;
   return 讀取紀錄(課)[排序欄位];
 }
 function 排序課次(課次){
@@ -298,9 +317,9 @@ function 顯示名單(焦點) {
   取得('homework-count').textContent = 全部.filter(課=>讀取紀錄(課).homework===2).length;
   取得('assessment-count').textContent = 全部.filter(課=>讀取紀錄(課).assessment===2).length;
   const 當日編號 = [...new Set(全部.map(課=>課.student.id))];
-  取得('meal-ordered-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號)>0).length;
-  取得('meal-waiting-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號)===1).length;
-  取得('meal-eaten-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號)===2).length;
+  取得('meal-ordered-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號).ordered).length;
+  取得('meal-waiting-count').textContent = 當日編號.filter(編號=>{const 狀態=讀取訂餐(編號);return 狀態.ordered && !狀態.eaten;}).length;
+  取得('meal-eaten-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號).eaten).length;
   取得('list-count').textContent = 全部.length+' 筆課次';
   取得('shown-count').textContent = '顯示 '+顯示.length+' 筆課次';
   取得('day-label').textContent = new Date(取得('record-date').value+'T12:00:00').toLocaleDateString('zh-TW',{weekday:'long'})+'・依每週排課';
@@ -333,20 +352,21 @@ function 顯示名單(焦點) {
       修改紀錄(課,'score',分數);保存();if(排序欄位==='score')顯示名單(分數欄.id);
     });
     分數格.append(分數欄);列.append(分數格);
-    const 訂餐值 = 讀取訂餐(課.student.id);
-    const 訂餐按鈕 = 元素('button','status '+(訂餐值===2?'good':訂餐值===1?'working':''),訂餐選項[訂餐值]);
-    訂餐按鈕.id=課.key+'-meal';
-    訂餐按鈕.setAttribute('aria-label',課.student.name+'當天訂餐：'+訂餐選項[訂餐值]+'；點選改為'+訂餐選項[(訂餐值+1)%訂餐選項.length]);
-    訂餐按鈕.title='同一學生當天跨班共用，重複點選可更正';
-    訂餐按鈕.addEventListener('click',()=>{切換訂餐(課.student.id);保存();顯示名單(訂餐按鈕.id);});
-    const 訂餐格=元素('td');訂餐格.append(訂餐按鈕);列.append(訂餐格);
+    const 訂餐狀態=讀取訂餐(課.student.id);const 訂餐紀錄=讀取訂餐紀錄(課.student.id);
+    const 訂餐選單=元素('select','meal-select '+(訂餐狀態.eaten?'good':訂餐狀態.ordered?'working':訂餐紀錄===3?'cancelled':''));訂餐選單.id=課.key+'-meal';
+    訂餐選單內容(課.student.id).forEach(([值,名稱])=>訂餐選單.append(new Option(名稱,值)));
+    訂餐選單.value=訂餐紀錄===0 || (訂餐紀錄===1 && 固定訂餐(課.student.id))?'預設':String(訂餐紀錄);
+    訂餐選單.setAttribute('aria-label',課.student.name+'當天訂餐：'+訂餐狀態.label);
+    訂餐選單.title='同一學生當天跨班共用；固定安排可在學生資料中修改';
+    訂餐選單.addEventListener('change',()=>{設定訂餐(課.student.id,訂餐選單.value);保存();顯示名單(訂餐選單.id);});
+    const 訂餐格=元素('td');訂餐格.append(訂餐選單);列.append(訂餐格);
     const 格=元素('td');const 備註=元素('input','note');備註.value=記.note;備註.maxLength=500;備註.placeholder='記下這堂課的提醒…';備註.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的備註');備註.addEventListener('input',()=>{修改紀錄(課,'note',備註.value);保存();});格.append(備註);列.append(格);
     // 請假時保留備註供填寫原因，其餘後續欄位鎖定，原有紀錄不變。
     if(記.arrival===3){
       列.classList.add('leave-row');
       備註.placeholder='填寫請假原因…';
       備註.setAttribute('aria-label',課.student.name+'，'+課.className+'的請假原因與備註');
-      列.querySelectorAll('td:nth-child(n+3) button, td:nth-child(n+3) input:not(.note)').forEach(控制=>{
+      列.querySelectorAll('td:nth-child(n+3) button, td:nth-child(n+3) select, td:nth-child(n+3) input:not(.note)').forEach(控制=>{
         控制.disabled=true;控制.title='此課次已請假，請先變更到班狀態再登記';
       });
     }
@@ -440,6 +460,8 @@ function 合併學生時段(學生){
 }
 function 開啟學生(學生) {
   編輯編號=學生?.id || null;取得('dialog-title').textContent=學生?'編輯學生資料與課表':'新增學生';取得('student-name').value=學生?.name || '';取得('student-grade').value=學生?.grade || '';
+  const 固定星期=new Set(學生?.mealDays || []);
+  取得('student-meal-days').querySelectorAll('.student-meal-day').forEach(勾選=>勾選.checked=固定星期.has(Number(勾選.value)));
   取得('student-schedules').replaceChildren();
   const 時段列=學生?合併學生時段(學生):[];
   if(時段列.length)時段列.forEach(項=>新增學生時段(項.班號,項.時));
@@ -464,8 +486,9 @@ function 開啟學生(學生) {
     }
   }
   const 編號=編輯編號 || 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-  if(編輯編號)Object.assign(資料.students.find(人=>人.id===編號),{name:姓名,grade:取得('student-grade').value.trim()});
-  else 資料.students.push({id:編號,name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value});
+  const 固定用餐星期=[...取得('student-meal-days').querySelectorAll('.student-meal-day:checked')].map(項=>Number(項.value));
+  if(編輯編號)Object.assign(資料.students.find(人=>人.id===編號),{name:姓名,grade:取得('student-grade').value.trim(),mealDays:固定用餐星期});
+  else 資料.students.push({id:編號,name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value,mealDays:固定用餐星期});
   // 只更換這名學生的週課表，同班其他學生仍保留原來的排課。
   for(const 班 of 資料.classes){
     for(const 組 of 班.groups)組.studentIds=組.studentIds.filter(人=>人!==編號);
@@ -473,7 +496,7 @@ function 開啟學生(學生) {
     const 時段=課表.filter(項=>項.班號===班.id).map(項=>項.時);
     if(時段.length)班.groups.push({studentIds:[編號],slots:時段});
   }
-  保存();顯示名單();取得('student-dialog').close();if(取得('roster-dialog').open)顯示學生總名單();通知('學生班級與每週上課時段已更新。');
+  保存();顯示名單();取得('student-dialog').close();if(取得('roster-dialog').open)顯示學生總名單();通知('學生班級、上課時段與固定訂餐已更新。');
 });
 function 換日(差){const 日=new Date(取得('record-date').value+'T12:00:00');日.setDate(日.getDate()+差);const 值=日.getFullYear()+'-'+String(日.getMonth()+1).padStart(2,'0')+'-'+String(日.getDate()).padStart(2,'0');if(日期有效(值)){取得('record-date').value=值;取得('time-filter').value='';顯示名單();}}
 取得('previous-day').addEventListener('click',()=>換日(-1));取得('next-day').addEventListener('click',()=>換日(1));
@@ -490,7 +513,7 @@ document.querySelectorAll('[data-filter]').forEach(按鈕=>按鈕.addEventListen
 function 下載(內容,檔名,類型){const 網址=URL.createObjectURL(new Blob([內容],{type:類型}));const 連結=元素('a');連結.href=網址;連結.download=檔名;連結.click();setTimeout(()=>URL.revokeObjectURL(網址),1000);}
 function 表格文字(文字){let 值=String(文字);if(/^\s*[=+@-]/.test(值))值="'"+值;return '"'+值.replaceAll('"','""')+'"';}
 取得('backup').addEventListener('click',()=>下載(JSON.stringify(資料,null,2),'小日常完整備份-'+今日()+'.json','application/json'));
-取得('export-record').addEventListener('click',()=>{const 列=[['日期','姓名','年級','部門','班級','開始','結束','到班','作業','評量','考卷進度','考卷分數','當天訂餐（同生跨班共用）','備註']];範圍課次().forEach(課=>{const 記=讀取紀錄(課);列.push([取得('record-date').value,課.student.name,課.student.grade,課.department,課.className,課.start,課.end,狀態選項.arrival[記.arrival],狀態選項.homework[記.homework],狀態選項.assessment[記.assessment],狀態選項.exam[記.exam],記.score,訂餐選項[讀取訂餐(課.student.id)],記.note]);});下載('\uFEFF'+列.map(項=>項.map(表格文字).join(',')).join('\r\n'),'班級紀錄-'+取得('record-date').value+'.csv','text/csv;charset=utf-8');});
+取得('export-record').addEventListener('click',()=>{const 列=[['日期','姓名','年級','部門','班級','開始','結束','到班','作業','評量','考卷進度','考卷分數','當天訂餐（同生跨班共用）','備註']];範圍課次().forEach(課=>{const 記=讀取紀錄(課);列.push([取得('record-date').value,課.student.name,課.student.grade,課.department,課.className,課.start,課.end,狀態選項.arrival[記.arrival],狀態選項.homework[記.homework],狀態選項.assessment[記.assessment],狀態選項.exam[記.exam],記.score,讀取訂餐(課.student.id).label,記.note]);});下載('\uFEFF'+列.map(項=>項.map(表格文字).join(',')).join('\r\n'),'班級紀錄-'+取得('record-date').value+'.csv','text/csv;charset=utf-8');});
 取得('restore').addEventListener('click',()=>取得('restore-file').click());
 取得('restore-file').addEventListener('change',async 事件=>{
   const 檔=事件.target.files[0];if(!檔)return;
