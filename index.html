@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="安親班每日到班、作業、評量與接送紀錄。">
+  <title>小日常・安親班紀錄</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="index.html"><span class="brand-icon">日</span><span>小日常<small>安親班紀錄本</small></span></a>
+    <div class="nav-caption">班級工作台</div>
+    <div class="nav-current">▦ <span>每日紀錄</span></div>
+    <div class="sidebar-bottom"><span class="small-icon">✓</span><strong>把時間留給孩子</strong><p>每一個小進步，<br>都值得好好記下來。</p></div>
+  </aside>
+  <main>
+    <header><span>班級工作台 <span class="breadcrumb">／ 每日紀錄</span></span><span id="save-state" role="status">紀錄自動保存</span></header>
+    <section class="heading school-heading">
+      <img class="school-picture" src="補習班插畫.png" alt="黃老師與愛美語補習班的可愛門面插畫，搭配紅黃招牌與藍色玻璃門" width="1536" height="1024">
+      <div class="heading-copy"><div class="eyebrow">黃老師・愛美語 <span class="school-tag">安親小日常</span></div><h1>每日班級紀錄<span class="title-dot">.</span></h1><p>到班、作業、評量，<br class="mobile-break">一起記下孩子的每一步。</p></div>
+      <button id="add-student" class="primary">＋ 新增學生</button>
+    </section>
+    <section class="date-bar"><div class="date-controls"><button id="previous-day" aria-label="前一天">‹</button><label for="record-date" class="sr-only">紀錄日期</label><input id="record-date" type="date"><button id="next-day" aria-label="後一天">›</button><button id="today">回到今天</button></div><span id="day-label"></span></section>
+    <section class="stats" aria-label="當日摘要"><article><span>班級學生</span><div><strong id="total-count">0</strong><small>位學生</small></div><i>全班名單</i></article><article><span>已到班</span><div><strong id="arrival-count">0</strong><small id="arrival-total">／ 0 位</small></div><i class="teal">含已離班學生</i></article><article><span>作業已完成</span><div><strong id="homework-count">0</strong><small>位學生</small></div><i>今天的努力，記下來</i></article><article><span>評量已完成</span><div><strong id="assessment-count">0</strong><small>位學生</small></div><i>一步一步累積進步</i></article></section>
+    <section class="record-panel"><div class="panel-top"><div><h2>學生紀錄 <span id="list-count">0 位</span></h2><p>點選狀態即可切換，變更會自動保存。</p></div><div class="search-wrap"><label for="search" class="sr-only">搜尋學生姓名</label><input id="search" type="search" placeholder="搜尋學生姓名…"></div></div>
+      <div class="toolbar"><div class="filters" aria-label="篩選學生"><button class="active" data-filter="all" aria-pressed="true">全部學生</button><button data-filter="pending" aria-pressed="false">尚未到班</button><button data-filter="unfinished" aria-pressed="false">待完成</button></div><button id="mark-arrived" class="text-button">✓ 全班未到者設為到班</button></div>
+      <div class="table-wrap"><table><thead><tr><th>學生姓名</th><th>到班狀態</th><th>作業進度</th><th>評量進度</th><th>給孩子的小筆記</th></tr></thead><tbody id="student-rows"></tbody></table></div>
+      <div id="empty-state" class="empty" hidden><span>✎</span><h3>準備好記錄今天了嗎？</h3><p>點選「新增學生」建立名單，開始你的班級紀錄。</p></div>
+      <div class="panel-footer"><span>小提醒：狀態按鈕可重複點選，循環切換。</span><span id="shown-count">顯示 0 位學生</span></div>
+    </section>
+    <footer><div><strong>每一天的小日常，都是成長的足跡。</strong><p>資料僅儲存於這台裝置的目前瀏覽器，建議定期下載備份。</p></div><div class="backup-actions"><button id="export-record">匯出當日表格</button><button id="backup">備份全部資料</button><button id="restore">還原備份</button><input id="restore-file" type="file" accept=".json,application/json" hidden></div></footer>
+  </main>
+  <dialog id="student-dialog"><form id="student-form"><div class="dialog-heading"><h2 id="dialog-title">新增學生</h2><button type="button" id="close-dialog" aria-label="關閉">×</button></div><p>名單會顯示在新增日期及之後的每日紀錄。</p><label for="student-name">學生姓名</label><input id="student-name" maxlength="30" required placeholder="例如：陳小晴"><label for="student-grade">年級／班別</label><input id="student-grade" maxlength="30" placeholder="例如：三年級・向日葵班"><button type="submit" class="primary">儲存學生</button></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
