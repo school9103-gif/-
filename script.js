@@ -1,8 +1,11 @@
 const 取得 = (識別) => document.getElementById(識別);
 // 只可填入公開金鑰，絕對不可放入管理員或伺服器密鑰。
-const 驗證設定 = { 網址: '', 公開金鑰: '' };
+// 只放可公開使用的連線資訊；服務密鑰絕對不能放在瀏覽器。
+const 驗證設定 = { 網址: 'https://iwndjcaxobjsthvvqzox.supabase.co', 公開金鑰: 'sb_publishable_PDiCmHkRNPSV39GW2vOQlg_8i4oBZYB' };
 // 只有完全尚未設定時使用原本的本機模式；設定錯誤或斷線不可繞過登入。
 const 本機模式 = !驗證設定.網址 && !驗證設定.公開金鑰;
+// 依使用者要求，網址持有者可直接進入；雲端資料表只允許匿名角色存取共享工作台。
+const 免登入模式 = true;
 let 驗證服務;
 let 工作台;
 let 目前使用者 = null;
@@ -29,7 +32,7 @@ function 設定路徑(路徑) {
   if (location.hash !== 路徑) location.replace(路徑);
 }
 async function 檢查登入() {
-  if (!驗證服務 || 主動登出 || 驗證中) return;
+  if (免登入模式 || !驗證服務 || 主動登出 || 驗證中) return;
   const 本次序號 = ++驗證序號;
   驗證中 = true;
   鎖定工作台();
@@ -45,7 +48,7 @@ async function 檢查登入() {
       return;
     }
     if (!工作台) 工作台 = 建立工作台();
-    if (目前使用者 !== data.user.id) 工作台.載入(data.user.id);
+    if (目前使用者 !== data.user.id) await 工作台.載入(data.user.id);
     目前使用者 = data.user.id;
     取得('auth-account').textContent = data.user.email || '已登入';
     取得('auth-screen').hidden = true;
@@ -60,7 +63,7 @@ async function 檢查登入() {
 }
 async function 準備驗證() {
   if (本機模式) {
-    if (!工作台) { 工作台 = 建立工作台(); 工作台.載入(); }
+    if (!工作台) { 工作台 = 建立工作台(); await 工作台.載入(); }
     取得('auth-screen').hidden = true;
     取得('protected-app').hidden = false;
     取得('protected-app').inert = false;
@@ -68,6 +71,22 @@ async function 準備驗證() {
     取得('auth-signout').hidden = true;
     取得('local-mode-notice').hidden = false;
     設定路徑('#records');
+    return;
+  }
+  if (免登入模式) {
+    if (!驗證設定.網址 || !驗證設定.公開金鑰) { 登入訊息('尚未連接雲端專案，請先完成專案設定。'); return; }
+    try {
+      if (!驗證服務) {
+        if (!window.supabase) await new Promise((完成, 失敗) => {
+          const 套件=document.createElement('script');套件.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';
+          const 計時=setTimeout(()=>失敗(new Error('載入逾時')),15000);套件.onload=()=>{clearTimeout(計時);完成();};套件.onerror=()=>{clearTimeout(計時);失敗(new Error('無法載入雲端套件'));};document.head.append(套件);
+        });
+        驗證服務=window.supabase.createClient(驗證設定.網址,驗證設定.公開金鑰,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:(網址,選項={})=>fetch(網址,{...選項,signal:AbortSignal.timeout(15000)})}});
+      }
+      if (!工作台)工作台=建立工作台();
+      await 工作台.載入('公開工作台');目前使用者='公開工作台';主動登出=false;
+      取得('auth-screen').hidden=true;取得('protected-app').hidden=false;取得('protected-app').inert=false;取得('auth-account').textContent='網址直入・雲端共享';取得('auth-signout').hidden=true;取得('local-mode-notice').hidden=true;設定路徑('#records');
+    } catch { 鎖定工作台();登入訊息('雲端資料無法載入，請檢查網路或 Supabase 設定。'); }
     return;
   }
   鎖定工作台();
@@ -122,7 +141,7 @@ async function 準備驗證() {
   finally { 取得('auth-password').value = ''; 取得('auth-submit').disabled = false; }
 });
 取得('auth-signout').addEventListener('click', async () => {
-  if (本機模式) return;
+  if (本機模式 || 免登入模式) return;
   主動登出 = true;
   try { localStorage.setItem('小日常登入鎖定', '是'); } catch { /* 本次頁面仍維持鎖定。 */ }
   ++驗證序號;
@@ -135,13 +154,13 @@ async function 準備驗證() {
 });
 取得('auth-retry').addEventListener('click', 準備驗證);
 window.addEventListener('hashchange', () => {
-  if (本機模式) { 設定路徑('#records'); return; }
+  if (本機模式 || 免登入模式) { 設定路徑('#records'); return; }
   if (目前使用者 && location.hash === '#records') return;
   if (!目前使用者 && location.hash === '#login') return;
   檢查登入();
 });
 window.addEventListener('online', 檢查登入);
-window.addEventListener('offline', () => { if (本機模式) return; ++驗證序號; 清除登入畫面資料(); 登入訊息('網路已中斷，請恢復連線後繼續。'); });
+window.addEventListener('offline', () => { if (本機模式 || 免登入模式) return; ++驗證序號; 清除登入畫面資料(); 登入訊息('網路已中斷，請恢復連線後繼續。'); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) 檢查登入(); });
 window.addEventListener('pageshow', 事件 => { if (事件.persisted) 檢查登入(); });
 準備驗證();
@@ -158,6 +177,8 @@ let 允許儲存 = false;
 let 篩選 = 'all';
 let 編輯編號 = null;
 let 通知計時;
+let 雲端使用者 = '';
+let 雲端保存佇列 = Promise.resolve();
 function 今日() { const 日 = new Date(); return 日.getFullYear() + '-' + String(日.getMonth()+1).padStart(2,'0') + '-' + String(日.getDate()).padStart(2,'0'); }
 function 日期有效(日) { return typeof 日 === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(日) && !Number.isNaN(new Date(日).getTime()) && new Date(日).toISOString().slice(0,10) === 日; }
 function 時間有效(時) { return typeof 時 === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(時); }
@@ -200,7 +221,18 @@ function 資料有效(內容) {
     return !其餘.length && 編號.has(人) && 班號.has(班) && 時間有效(起) && 時間有效(迄) && 起 < 迄 && 紀錄有效(紀錄);
   }));
 }
-function 保存() { try { if (!允許儲存 || !儲存鍵) throw new Error('未開放儲存'); localStorage.setItem(儲存鍵,JSON.stringify(資料)); 取得('save-state').textContent = '所有變更已保存'; return true; } catch { 取得('save-state').textContent = '尚未保存，請下載備份'; 通知('目前無法保存，請先下載全部資料備份。'); return false; } }
+async function 同步雲端(使用者編號,快照) {
+  const {error}=await 驗證服務.from('classroom_workspaces').upsert({workspace_key:'taisho-main',data:快照,updated_at:new Date().toISOString()},{onConflict:'workspace_key'});
+  if(error)throw error;
+  if(雲端使用者===使用者編號)取得('save-state').textContent='所有變更已同步';
+}
+function 排入雲端保存(){
+  const 使用者編號=雲端使用者;const 快照=JSON.parse(JSON.stringify(資料));
+  雲端保存佇列=雲端保存佇列.then(()=>同步雲端(使用者編號,快照)).catch(()=>{
+    if(雲端使用者===使用者編號){取得('save-state').textContent='本機已保存，雲端同步失敗';通知('本機已保存，但雲端同步失敗，請檢查網路後再試。');}
+  });
+}
+function 保存() { try { if (!允許儲存 || !儲存鍵) throw new Error('未開放儲存'); localStorage.setItem(儲存鍵,JSON.stringify(資料)); 取得('save-state').textContent = 雲端使用者 ? '正在同步雲端…' : '所有變更已保存'; if(雲端使用者)排入雲端保存(); return true; } catch { 取得('save-state').textContent = '尚未保存，請下載備份'; 通知('目前無法保存，請先下載全部資料備份。'); return false; } }
 function 預設紀錄() { return {arrival:0,homework:0,assessment:0,exam:0,score:'',note:''}; }
 function 讀取紀錄(課) { const 日 = 取得('record-date').value; return {...預設紀錄(),...(課.legacy ? 資料.days[日]?.[課.student.id] : 資料.lessonDays[日]?.[課.key])}; }
 function 修改紀錄(課,欄,值) { const 日 = 取得('record-date').value; const 容器 = 課.legacy ? 資料.days : 資料.lessonDays; 容器[日] ||= {}; 容器[日][課.legacy ? 課.student.id : 課.key] = {...讀取紀錄(課),[欄]:值}; }
@@ -2215,26 +2247,45 @@ function 顯示匯入預覽(){
   if(取得('import-scope').value!=='school')return;
   try{
     if(!允許儲存 || !儲存鍵)throw new Error('尚未開放儲存');
-    const 新=合併來源();localStorage.setItem(儲存鍵,JSON.stringify(新));資料=新;
-    取得('save-state').textContent='名單與課表已保存';取得('import-dialog').close();顯示名單();通知('已合併核對名單與課表，原有紀錄保留。');
+     const 新=合併來源();資料=新;保存();
+     取得('import-dialog').close();顯示名單();通知('已合併核對名單與課表，原有紀錄保留。');
   }catch{通知('未匯入：可能有同名學生需核對，或瀏覽器無法保存資料。');}
 });
 function 清空(){
-  資料=空資料();儲存鍵='';允許儲存=false;編輯編號=null;篩選='all';
+  資料=空資料();儲存鍵='';允許儲存=false;編輯編號=null;篩選='all';雲端使用者='';
   取得('record-date').value=今日();取得('student-form').reset();取得('search').value='';
   已選部門=null;排序欄位='';排序方向=1;
   for(const 名 of ['class-filter','time-filter'])取得(名).value='';
   document.querySelectorAll('[data-filter]').forEach(項=>{項.classList.toggle('active',項.dataset.filter==='all');項.setAttribute('aria-pressed',String(項.dataset.filter==='all'));});
   取得('import-rows').replaceChildren();取得('week-content').replaceChildren();取得('toast').hidden=true;clearTimeout(通知計時);顯示名單();
 }
-function 載入(使用者編號){
-  清空();儲存鍵=本機模式?'小日常班級紀錄第一版':'小日常班級紀錄第一版:'+使用者編號;允許儲存=true;
-  取得('save-state').textContent=本機模式?'本機紀錄自動保存':'此帳號的紀錄自動保存';
+async function 載入(使用者編號){
+  清空();儲存鍵=本機模式?'小日常班級紀錄第一版':'小日常班級紀錄第一版:'+使用者編號;允許儲存=true;雲端使用者=本機模式?'':使用者編號;
+  取得('save-state').textContent=本機模式?'本機紀錄自動保存':'正在讀取雲端資料…';
   try{
-    const 原=localStorage.getItem(儲存鍵);
-    if(原){const 內容=JSON.parse(原);if(!資料有效(內容))throw new Error('紀錄格式錯誤');資料={...內容,classes:內容.classes||[],lessonDays:內容.lessonDays||{},meals:內容.meals||{}};}
-    else{資料=合併來源();保存();}
-  }catch{允許儲存=false;取得('save-state').textContent='無法讀取原有紀錄';通知('原有資料無法讀取，請先保留備份並確認格式。');}
+    if(本機模式){
+      const 原=localStorage.getItem(儲存鍵);
+      if(原){const 內容=JSON.parse(原);if(!資料有效(內容))throw new Error('紀錄格式錯誤');資料={...內容,classes:內容.classes||[],lessonDays:內容.lessonDays||{},meals:內容.meals||{}};}
+      else{資料=合併來源();保存();}
+    }else{
+      const {data,error}=await 驗證服務.from('classroom_workspaces').select('data').eq('workspace_key','taisho-main').maybeSingle();
+      if(error)throw error;
+      const 雲端資料=data?.data;
+      if(雲端資料 && 資料有效(雲端資料)){
+        資料={...雲端資料,classes:雲端資料.classes||[],lessonDays:雲端資料.lessonDays||{},meals:雲端資料.meals||{}};
+        localStorage.setItem(儲存鍵,JSON.stringify(資料));
+      }else{
+        let 本機資料=null;
+        for(const 鍵 of [儲存鍵,'小日常班級紀錄第一版']){
+          const 原=localStorage.getItem(鍵);if(!原)continue;
+          try{const 內容=JSON.parse(原);if(資料有效(內容)){本機資料=內容;break;}}catch{}
+        }
+        資料=本機資料?{...本機資料,classes:本機資料.classes||[],lessonDays:本機資料.lessonDays||{},meals:本機資料.meals||{}}:合併來源();
+        localStorage.setItem(儲存鍵,JSON.stringify(資料));
+        await 同步雲端(使用者編號,資料);
+      }
+    }
+  }catch{允許儲存=false;雲端使用者='';取得('save-state').textContent='無法讀取雲端資料';通知('雲端資料無法讀取，請檢查網路或 Supabase 設定。');throw new Error('雲端資料載入失敗');}
   顯示名單();
 }
 return {載入,清空};

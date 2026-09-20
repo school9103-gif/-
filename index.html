@@ -11,17 +11,17 @@
 <body>
   <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
     <div class="auth-card">
-      <span class="brand-icon">日</span><h1 id="auth-title">登入小日常</h1>
-      <p>登入後，繼續記錄孩子的每一步。</p>
-      <form id="auth-form">
+      <span class="brand-icon">日</span><h1 id="auth-title">小日常班級工作台</h1>
+      <p>正在連線雲端資料，請稍候。</p>
+      <form id="auth-form" hidden>
         <label for="auth-email">電子郵件</label><input id="auth-email" type="email" autocomplete="username" required>
         <label for="auth-password">密碼</label><input id="auth-password" type="password" autocomplete="current-password" required>
         <button id="auth-submit" class="primary" type="submit" disabled>登入</button>
       </form>
-      <p id="auth-message" role="status" aria-live="polite">正在準備登入服務…</p>
-      <button id="auth-retry" type="button">重新檢查連線</button>
-      <p class="auth-help">請使用管理員建立的帳號。需要帳號或忘記密碼時，請聯絡管理員。</p>
-      <noscript>請啟用瀏覽器的指令碼功能，才能登入。</noscript>
+      <p id="auth-message" role="status" aria-live="polite">正在載入雲端工作台…</p>
+      <button id="auth-retry" type="button">重新連線</button>
+      <p class="auth-help">開啟網址即可使用；所有老師共用同一份雲端資料。</p>
+      <noscript>請啟用瀏覽器的指令碼功能，才能使用工作台。</noscript>
     </div>
   </section>
   <div id="protected-app" hidden inert>
@@ -51,7 +51,7 @@
       <div id="empty-state" class="empty" hidden><span>✎</span><h3>準備好記錄今天了嗎？</h3><p>點選「新增學生」建立名單，開始你的班級紀錄。</p></div>
       <div class="panel-footer"><span>狀態可重複點選切換。每筆課次登記一份考卷，分數可填 0～100（含小數），空白代表未登記。</span><span id="shown-count">顯示 0 位學生</span></div>
     </section>
-    <footer><div><strong>每一天的小日常，都是成長的足跡。</strong><p>資料僅儲存於這台裝置的目前瀏覽器，建議定期下載備份。</p></div><div class="backup-actions"><button id="export-record">匯出當日表格</button><button id="backup">備份全部資料</button><button id="restore">還原備份</button><input id="restore-file" type="file" accept=".json,application/json" hidden></div></footer>
+    <footer><div><strong>每一天的小日常，都是成長的足跡。</strong><p>資料會同步至 Supabase 雲端；網頁仍保留本機暫存，建議定期下載備份。</p></div><div class="backup-actions"><button id="export-record">匯出當日表格</button><button id="backup">備份全部資料</button><button id="restore">還原備份</button><input id="restore-file" type="file" accept=".json,application/json" hidden></div></footer>
   </main>
   <dialog id="roster-dialog" aria-labelledby="roster-title"><div class="dialog-heading"><h2 id="roster-title">學生名單</h2><button type="button" id="close-roster" aria-label="關閉學生名單">×</button></div><p>顯示已匯入的全部學生，不受日期、星期及部門篩選限制。點選學生即可編輯與分班。</p><label for="roster-search">搜尋學生姓名</label><input id="roster-search" type="search" placeholder="輸入學生姓名"><label class="roster-unassigned"><input id="roster-unassigned" type="checkbox">只顯示未分班學生</label><p id="roster-count" aria-live="polite"></p><div id="roster-list"></div></dialog>
   <dialog id="class-editor" aria-labelledby="class-editor-title"><form id="class-editor-form"><div class="dialog-heading"><h2 id="class-editor-title">新增班級</h2><button type="button" id="close-class-editor" aria-label="關閉班級設定">×</button></div><div id="class-choice-field"><label for="class-choice">選擇要修改的班級</label><select id="class-choice"></select></div><label for="class-department">部門</label><select id="class-department"><option>安親</option><option>美語</option><option>數學</option><option>包套</option></select><label for="class-name">班級名稱</label><input id="class-name" maxlength="60" required placeholder="例如：週三數學班"><p id="class-editor-help"></p><button type="submit" class="primary">儲存班級</button></form></dialog>
