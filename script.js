@@ -146,95 +146,263 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) 檢�
 window.addEventListener('pageshow', 事件 => { if (事件.persisted) 檢查登入(); });
 準備驗證();
 
+
 function 建立工作台() {
-const 取得 = (識別) => document.getElementById(識別);
+const 取得 = 識別 => document.getElementById(識別);
+const 空資料 = () => ({ version: 1, students: [], days: {}, classes: [], lessonDays: {}, meals: {} });
+const 狀態選項 = { arrival: ['尚未到班','已到班','已離班','請假'], homework: ['未開始','進行中','已完成','免做'], assessment: ['未開始','進行中','已完成','免做'], exam: ['未開始','已完成'] };
+const 訂餐選項 = ['未訂餐','已訂餐','已用餐'];
+let 資料 = 空資料();
 let 儲存鍵 = '';
-const 狀態選項 = { arrival: ['尚未到班', '已到班', '已離班', '請假'], homework: ['未開始', '進行中', '已完成', '免做'], assessment: ['未開始', '進行中', '已完成', '免做'] };
-let 資料 = { version: 1, students: [], days: {} };
+let 允許儲存 = false;
 let 篩選 = 'all';
 let 編輯編號 = null;
 let 通知計時;
-let 允許儲存 = true;
-
-// 使用本地日期，避免午夜附近被時差切換到前一天。
-function 今日() { const 時間 = new Date(); return `${時間.getFullYear()}-${String(時間.getMonth() + 1).padStart(2, '0')}-${String(時間.getDate()).padStart(2, '0')}`; }
-取得('record-date').value = 今日();
-function 通知(內容) { 取得('toast').textContent = 內容; 取得('toast').hidden = false; clearTimeout(通知計時); 通知計時 = setTimeout(() => 取得('toast').hidden = true, 3500); }
-function 日期有效(日期) { return typeof 日期 === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(日期) && !Number.isNaN(new Date(日期).getTime()) && new Date(日期).toISOString().slice(0, 10) === 日期; }
-// 還原前先檢查每筆資料，避免格式不符的檔案蓋過原有紀錄。
-function 資料有效(內容) {
-  if (!內容 || 內容.version !== 1 || !Array.isArray(內容.students) || !內容.days || typeof 內容.days !== 'object' || Array.isArray(內容.days)) return false;
-  const 編號集合 = new Set();
-  for (const 學生 of 內容.students) {
-    if (!學生 || typeof 學生.id !== 'string' || !/^s[\w-]+$/.test(學生.id) || 編號集合.has(學生.id) || typeof 學生.name !== 'string' || !學生.name.trim() || 學生.name.length > 30 || typeof 學生.grade !== 'string' || 學生.grade.length > 30 || !日期有效(學生.start)) return false;
-    編號集合.add(學生.id);
-  }
-  return Object.entries(內容.days).every(([日期, 當日]) => 日期有效(日期) && 當日 && typeof 當日 === 'object' && !Array.isArray(當日) && Object.entries(當日).every(([編號, 紀錄]) => 編號集合.has(編號) && 紀錄 && ['arrival', 'homework', 'assessment'].every(項目 => Number.isInteger(紀錄[項目]) && 紀錄[項目] >= 0 && 紀錄[項目] < 4) && typeof 紀錄.note === 'string' && 紀錄.note.length <= 500));
-}
-function 保存() {
-  try { if (!允許儲存) throw new Error('尚未開放儲存'); localStorage.setItem(儲存鍵, JSON.stringify(資料)); 取得('save-state').textContent = '所有變更已保存'; }
-  catch { 取得('save-state').textContent = '尚未保存，請下載備份'; 通知('目前無法自動保存，請先下載全部資料備份。'); }
-}
-function 當日學生() { return 資料.students.filter(學生 => 學生.start <= 取得('record-date').value); }
-function 讀取紀錄(編號) { return 資料.days[取得('record-date').value]?.[編號] || { arrival: 0, homework: 0, assessment: 0, note: '' }; }
-function 修改紀錄(編號, 項目, 值) { const 日期 = 取得('record-date').value; 資料.days[日期] ||= {}; 資料.days[日期][編號] = { ...讀取紀錄(編號), [項目]: 值 }; 保存(); }
+function 今日() { const 日 = new Date(); return 日.getFullYear() + '-' + String(日.getMonth()+1).padStart(2,'0') + '-' + String(日.getDate()).padStart(2,'0'); }
+function 日期有效(日) { return typeof 日 === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(日) && !Number.isNaN(new Date(日).getTime()) && new Date(日).toISOString().slice(0,10) === 日; }
+function 時間有效(時) { return typeof 時 === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(時); }
+function 通知(文字) { 取得('toast').textContent = 文字; 取得('toast').hidden = false; clearTimeout(通知計時); 通知計時 = setTimeout(() => 取得('toast').hidden = true,4500); }
 function 元素(標籤, 樣式, 文字) { const 節點 = document.createElement(標籤); if (樣式) 節點.className = 樣式; if (文字 !== undefined) 節點.textContent = 文字; return 節點; }
-function 更新摘要() {
-  const 學生們 = 當日學生();
-  取得('total-count').textContent = 學生們.length;
-  取得('arrival-total').textContent = `／ ${學生們.length} 位`;
-  取得('arrival-count').textContent = 學生們.filter(學生 => [1, 2].includes(讀取紀錄(學生.id).arrival)).length;
-  取得('homework-count').textContent = 學生們.filter(學生 => 讀取紀錄(學生.id).homework === 2).length;
-  取得('assessment-count').textContent = 學生們.filter(學生 => 讀取紀錄(學生.id).assessment === 2).length;
+function 是物件(值) { return 值 && typeof 值 === 'object' && !Array.isArray(值); }
+function 分數有效(分數) { return 分數 === '' || (typeof 分數 === 'number' && Number.isFinite(分數) && 分數 >= 0 && 分數 <= 100); }
+function 紀錄有效(紀錄) {
+  // 舊紀錄未含考卷欄位仍可讀取；空白分數與零分分開保存。
+  return 是物件(紀錄) && ['arrival','homework','assessment'].every(欄位 => Number.isInteger(紀錄[欄位]) && 紀錄[欄位] >= 0 && 紀錄[欄位] < 4)
+    && (紀錄.exam === undefined || (Number.isInteger(紀錄.exam) && 紀錄.exam >= 0 && 紀錄.exam < 2))
+    && (紀錄.score === undefined || 分數有效(紀錄.score)) && typeof 紀錄.note === 'string' && 紀錄.note.length <= 500;
 }
-function 顯示名單(恢復按鈕) {
-  更新摘要();
-  const 學生們 = 當日學生();
-  const 關鍵字 = 取得('search').value.trim();
-  const 顯示學生 = 學生們.filter(學生 => { const 紀錄 = 讀取紀錄(學生.id); return 學生.name.includes(關鍵字) && (篩選 === 'all' || (篩選 === 'pending' ? 紀錄.arrival === 0 : 紀錄.homework < 2 || 紀錄.assessment < 2)); });
-  取得('list-count').textContent = `${學生們.length} 位`;
-  取得('shown-count').textContent = `顯示 ${顯示學生.length} 位學生`;
-  取得('day-label').textContent = new Date(取得('record-date').value + 'T12:00:00').toLocaleDateString('zh-TW', { weekday: 'long' }) + (取得('record-date').value === 今日() ? '・今天' : '・每日紀錄');
-  const 容器 = 取得('student-rows'); 容器.replaceChildren();
-  取得('empty-state').hidden = 顯示學生.length > 0;
-  取得('empty-state').querySelector('h3').textContent = 學生們.length ? '沒有符合條件的學生' : '準備好記錄今天了嗎？';
-  取得('empty-state').querySelector('p').textContent = 學生們.length ? '試著切換篩選條件，或輸入其他姓名。' : '點選「新增學生」建立名單，開始你的班級紀錄。';
-  for (const 學生 of 顯示學生) {
-    const 紀錄 = 讀取紀錄(學生.id); const 列 = 元素('tr'); const 姓名格 = 元素('td'); const 姓名區 = 元素('div', 'student-info');
-    姓名區.append(元素('span', 'avatar', 學生.name.slice(-2)));
-    const 姓名按鈕 = 元素('button', 'student-name', 學生.name); 姓名按鈕.title = '編輯學生資料'; 姓名按鈕.append(元素('small', '', 學生.grade || '尚未設定年級')); 姓名按鈕.addEventListener('click', () => 開啟學生(學生)); 姓名區.append(姓名按鈕); 姓名格.append(姓名區); 列.append(姓名格);
-    for (const 項目 of ['arrival', 'homework', 'assessment']) {
-      const 值 = 紀錄[項目]; const 樣式 = 值 === 3 ? 'leave' : 項目 === 'arrival' ? (值 > 0 ? 'good' : '') : (值 === 2 ? 'good' : 值 === 1 ? 'working' : '');
-      const 按鈕 = 元素('button', `status ${樣式}`, 狀態選項[項目][值]); const 按鈕編號 = `${學生.id}-${項目}`; 按鈕.id = 按鈕編號;
-      const 標題 = { arrival: '到班狀態', homework: '作業進度', assessment: '評量進度' }[項目];
-      按鈕.setAttribute('aria-label', `${學生.name}的${標題}：${狀態選項[項目][值]}，點選改為${狀態選項[項目][(值 + 1) % 4]}`);
-      按鈕.addEventListener('click', () => { 修改紀錄(學生.id, 項目, (值 + 1) % 4); 顯示名單(按鈕編號); });
-      const 格 = 元素('td'); 格.append(按鈕); 列.append(格);
-    }
-    const 備註格 = 元素('td'); const 備註 = 元素('input', 'note'); 備註.value = 紀錄.note; 備註.placeholder = '記下提醒或今天的進步…'; 備註.maxLength = 500; 備註.setAttribute('aria-label', `${學生.name}的備註`); 備註.addEventListener('input', () => 修改紀錄(學生.id, 'note', 備註.value)); 備註格.append(備註); 列.append(備註格); 容器.append(列);
+// 舊的每日紀錄原樣保留，新課次另存，避免跨班互相覆蓋。
+function 資料有效(內容) {
+  if (!是物件(內容) || 內容.version !== 1 || !Array.isArray(內容.students) || !是物件(內容.days)) return false;
+  const 編號 = new Set();
+  for (const 學生 of 內容.students) {
+    if (!學生 || typeof 學生.id !== 'string' || !/^s[\w-]+$/.test(學生.id) || 編號.has(學生.id) || typeof 學生.name !== 'string' || !學生.name.trim() || 學生.name.length > 30 || typeof 學生.grade !== 'string' || 學生.grade.length > 30 || !日期有效(學生.start)) return false;
+    編號.add(學生.id);
   }
-  if (恢復按鈕) 取得(恢復按鈕)?.focus();
+  if (!Object.entries(內容.days).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([人,紀錄]) => 編號.has(人) && 紀錄有效(紀錄)))) return false;
+  const 班級們 = 內容.classes === undefined ? [] : 內容.classes;
+  if (!Array.isArray(班級們)) return false;
+  const 班號 = new Set();
+  for (const 班 of 班級們) {
+    if (!班 || typeof 班.id !== 'string' || !/^c[\w-]+$/.test(班.id) || 班號.has(班.id) || typeof 班.name !== 'string' || !班.name || !['安親','美語','數學','包套'].includes(班.department) || !Array.isArray(班.groups)) return false;
+    班號.add(班.id);
+    for (const 組 of 班.groups) {
+      if (!組 || !Array.isArray(組.studentIds) || !組.studentIds.every(人 => 編號.has(人)) || !Array.isArray(組.slots) || !組.slots.every(時 => 時 && Number.isInteger(時.day) && 時.day >= 1 && 時.day <= 7 && 時間有效(時.start) && 時間有效(時.end) && 時.start < 時.end)) return false;
+    }
+  }
+  // 舊備份沒有訂餐欄位時視為空白；訂餐以日期與學生編號驗證。
+  const 訂餐們 = 內容.meals === undefined ? {} : 內容.meals;
+  if (!是物件(訂餐們) || !Object.entries(訂餐們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([人,值]) => 編號.has(人) && Number.isInteger(值) && 值 >= 0 && 值 < 訂餐選項.length))) return false;
+  const 課次們 = 內容.lessonDays === undefined ? {} : 內容.lessonDays;
+  return 是物件(課次們) && Object.entries(課次們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([鍵,紀錄]) => {
+    const [人,班,起,迄,...其餘] = 鍵.split('|');
+    return !其餘.length && 編號.has(人) && 班號.has(班) && 時間有效(起) && 時間有效(迄) && 起 < 迄 && 紀錄有效(紀錄);
+  }));
 }
-function 開啟學生(學生) { 編輯編號 = 學生?.id || null; 取得('dialog-title').textContent = 學生 ? '編輯學生資料' : '新增學生'; 取得('student-name').value = 學生?.name || ''; 取得('student-grade').value = 學生?.grade || ''; 取得('student-dialog').showModal(); 取得('student-name').focus(); }
-取得('add-student').addEventListener('click', () => 開啟學生());
-取得('close-dialog').addEventListener('click', () => 取得('student-dialog').close());
-取得('student-form').addEventListener('submit', 事件 => { 事件.preventDefault(); const 姓名 = 取得('student-name').value.trim(); if (!姓名) { 取得('student-name').focus(); return; } const 年級 = 取得('student-grade').value.trim(); if (編輯編號) { Object.assign(資料.students.find(學生 => 學生.id === 編輯編號), { name: 姓名, grade: 年級 }); } else { 資料.students.push({ id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9), name: 姓名, grade: 年級, start: 取得('record-date').value }); } 保存(); 顯示名單(); 取得('student-dialog').close(); 通知(編輯編號 ? '學生資料已更新' : '已加入學生名單'); });
-取得('record-date').addEventListener('change', () => { if (!日期有效(取得('record-date').value)) 取得('record-date').value = 今日(); 顯示名單(); });
-function 換日(差值) { const 日期 = new Date(取得('record-date').value + 'T12:00:00'); 日期.setDate(日期.getDate() + 差值); const 新日期 = `${日期.getFullYear()}-${String(日期.getMonth() + 1).padStart(2, '0')}-${String(日期.getDate()).padStart(2, '0')}`; if (日期有效(新日期)) { 取得('record-date').value = 新日期; 顯示名單(); } }
-取得('previous-day').addEventListener('click', () => 換日(-1)); 取得('next-day').addEventListener('click', () => 換日(1)); 取得('today').addEventListener('click', () => { 取得('record-date').value = 今日(); 顯示名單(); });
-取得('search').addEventListener('input', () => 顯示名單());
-document.querySelectorAll('[data-filter]').forEach(按鈕 => 按鈕.addEventListener('click', () => { 篩選 = 按鈕.dataset.filter; document.querySelectorAll('[data-filter]').forEach(選項 => { 選項.classList.toggle('active', 選項 === 按鈕); 選項.setAttribute('aria-pressed', String(選項 === 按鈕)); }); 顯示名單(); }));
-取得('mark-arrived').addEventListener('click', () => { const 待到學生 = 當日學生().filter(學生 => 讀取紀錄(學生.id).arrival === 0); if (!待到學生.length) { 通知('目前沒有尚未到班的學生'); return; } if (!confirm(`將 ${取得('record-date').value} 的 ${待到學生.length} 位尚未到班學生標記為已到班？`)) return; const 日期 = 取得('record-date').value; 資料.days[日期] ||= {}; 待到學生.forEach(學生 => 資料.days[日期][學生.id] = { ...讀取紀錄(學生.id), arrival: 1 }); 保存(); 顯示名單(); 通知(`已將 ${待到學生.length} 位學生標記為到班`); });
-function 下載(內容, 檔名, 類型) { const 網址 = URL.createObjectURL(new Blob([內容], { type: 類型 })); const 連結 = 元素('a'); 連結.href = 網址; 連結.download = 檔名; 連結.click(); setTimeout(() => URL.revokeObjectURL(網址), 1000); }
-取得('backup').addEventListener('click', () => 下載(JSON.stringify(資料, null, 2), `小日常完整備份-${今日()}.json`, 'application/json'));
-// 為表格文字加上引號，並阻止姓名、備註被試算表當成公式執行。
-function 表格文字(文字) { let 值 = String(文字); if (/^[\s]*[=+@-]/.test(值)) 值 = "'" + 值; return '"' + 值.replaceAll('"', '""') + '"'; }
-取得('export-record').addEventListener('click', () => { const 列們 = [['日期', '學生姓名', '年級／班別', '到班狀態', '作業進度', '評量進度', '備註']]; 當日學生().forEach(學生 => { const 紀錄 = 讀取紀錄(學生.id); 列們.push([取得('record-date').value, 學生.name, 學生.grade, 狀態選項.arrival[紀錄.arrival], 狀態選項.homework[紀錄.homework], 狀態選項.assessment[紀錄.assessment], 紀錄.note]); }); 下載('\uFEFF' + 列們.map(列 => 列.map(表格文字).join(',')).join('\r\n'), `班級紀錄-${取得('record-date').value}.csv`, 'text/csv;charset=utf-8'); });
-取得('restore').addEventListener('click', () => 取得('restore-file').click());
-取得('restore-file').addEventListener('change', async 事件 => { const 檔案 = 事件.target.files[0]; if (!檔案) return; try { if (檔案.size > 10000000) throw new Error('備份過大'); const 原本帳號 = 儲存鍵; const 備份 = JSON.parse(await 檔案.text()); if (!原本帳號 || 原本帳號 !== 儲存鍵 || (!目前使用者 && !本機模式)) return; if (!資料有效(備份)) throw new Error('備份格式不正確'); if (!confirm(`備份含 ${備份.students.length} 位學生，還原後將以備份取代目前紀錄。請先備份現有資料。確定還原？`)) return; 資料 = 備份; 允許儲存 = true; 保存(); 顯示名單(); 通知('備份已載入，請確認右上角儲存狀態'); } catch { 通知('無法還原：請選擇本站下載、格式完整且小於一千萬位元組的備份。'); } finally { 事件.target.value = ''; } });
-顯示名單();
+function 保存() { try { if (!允許儲存 || !儲存鍵) throw new Error('未開放儲存'); localStorage.setItem(儲存鍵,JSON.stringify(資料)); 取得('save-state').textContent = '所有變更已保存'; return true; } catch { 取得('save-state').textContent = '尚未保存，請下載備份'; 通知('目前無法保存，請先下載全部資料備份。'); return false; } }
+function 預設紀錄() { return {arrival:0,homework:0,assessment:0,exam:0,score:'',note:''}; }
+function 讀取紀錄(課) { const 日 = 取得('record-date').value; return {...預設紀錄(),...(課.legacy ? 資料.days[日]?.[課.student.id] : 資料.lessonDays[日]?.[課.key])}; }
+function 修改紀錄(課,欄,值) { const 日 = 取得('record-date').value; const 容器 = 課.legacy ? 資料.days : 資料.lessonDays; 容器[日] ||= {}; 容器[日][課.legacy ? 課.student.id : 課.key] = {...讀取紀錄(課),[欄]:值}; }
+// 同一位學生當天跨班共用一筆訂餐狀態，避免重複計算餐數。
+function 讀取訂餐(編號) { return 資料.meals[取得('record-date').value]?.[編號] ?? 0; }
+function 切換訂餐(編號) { const 日 = 取得('record-date').value; 資料.meals[日] ||= {}; 資料.meals[日][編號] = (讀取訂餐(編號) + 1) % 訂餐選項.length; }
+function 班級名稱(班) { const 同名 = 資料.classes.filter(項 => 項.name === 班.name); return 班.name + (同名.length > 1 ? '（' + (同名.findIndex(項 => 項.id === 班.id)+1) + '）' : ''); }
+function 每週文字(時段) { return 時段.map(時 => '週' + '一二三四五六日'[時.day-1] + ' ' + 時.start + '–' + 時.end).join('、'); }
+function 當日課次() {
+  const 日 = 取得('record-date').value;
+  const 星期 = new Date(日 + 'T12:00:00').getDay() || 7;
+  const 學生表 = new Map(資料.students.filter(人 => 人.start <= 日).map(人 => [人.id,人]));
+  const 結果 = new Map();
+  const 已分班 = new Set();
+  for (const 班 of 資料.classes) for (const 組 of 班.groups) for (const 編號 of 組.studentIds) {
+    已分班.add(編號);
+    const 學生 = 學生表.get(編號);
+    if (!學生) continue;
+    for (const 時 of 組.slots.filter(項 => 項.day === 星期)) {
+      const 鍵 = [編號,班.id,時.start,時.end].join('|');
+      結果.set(鍵,{key:鍵,student:學生,classId:班.id,department:班.department,className:班級名稱(班),start:時.start,end:時.end,legacy:false});
+    }
+  }
+  // 未分班學生仍可記錄；舊紀錄在原日期另外顯示，保留既有歷史。
+  for (const [編號,學生] of 學生表) if (!已分班.has(編號) || 資料.days[日]?.[編號]) 結果.set(編號,{key:編號,student:學生,classId:'legacy',department:'未分班／舊紀錄',className:資料.days[日]?.[編號] ? '原有每日紀錄' : '尚未分班',start:'',end:'',legacy:true});
+  return [...結果.values()].sort((甲,乙) => 甲.start.localeCompare(乙.start) || 甲.className.localeCompare(乙.className,'zh-Hant') || 甲.student.name.localeCompare(乙.student.name,'zh-Hant'));
+}
+function 設定選單(識別,選項,標籤) { const 下拉 = 取得(識別); const 原值 = 下拉.value; 下拉.replaceChildren(); 下拉.append(new Option(標籤,'')); 選項.forEach(([值,名稱]) => 下拉.append(new Option(名稱,值))); 下拉.value = 選項.some(項 => 項[0] === 原值) ? 原值 : ''; }
+// 空值代表全選，空集合代表全部取消。
+let 已選部門=null;
+function 部門符合(名稱){return 已選部門===null || 已選部門.has(名稱);}
+function 更新選單() {
+  const 選項=[...new Set(資料.classes.map(班=>班.department).concat(['未分班／舊紀錄']))];
+  const 容器=取得('department-filter');
+  if(容器.dataset.options!==JSON.stringify(選項)){
+    容器.replaceChildren();容器.dataset.options=JSON.stringify(選項);
+    for(const 名稱 of 選項){const 標籤=元素('label','');const 勾選=document.createElement('input');勾選.type='checkbox';勾選.value=名稱;標籤.append(勾選,document.createTextNode(名稱));容器.append(標籤);}
+  }
+  for(const 勾選 of 容器.querySelectorAll('input'))勾選.checked=部門符合(勾選.value);
+  const 班級選項 = 資料.classes.filter(班=>部門符合(班.department)).map(班=>[班.id,班級名稱(班)]);
+  if (部門符合('未分班／舊紀錄')) 班級選項.push(['legacy','未分班／舊紀錄']);
+  設定選單('class-filter',班級選項,'全部班級');
+  const 班號 = 取得('class-filter').value;
+  const 時段 = [...new Set(當日課次().filter(課=>(部門符合(課.department)) && (!班號 || 課.classId===班號)).map(課=>課.start ? 課.start+'–'+課.end : '未分時段'))].sort();
+  設定選單('time-filter',時段.map(項=>[項,項]),'全部時段');
+}
+function 範圍課次() { return 當日課次().filter(課=>(部門符合(課.department)) && (!取得('class-filter').value || 課.classId===取得('class-filter').value) && (!取得('time-filter').value || (課.start ? 課.start+'–'+課.end : '未分時段')===取得('time-filter').value)); }
+let 排序欄位='';let 排序方向=1;
+function 排序值(課){
+  if(排序欄位==='name')return 課.student.name;
+  if(排序欄位==='class')return 課.className;
+  if(排序欄位==='time')return 課.start ? 課.start+'–'+課.end : '';
+  if(排序欄位==='meal')return 讀取訂餐(課.student.id);
+  return 讀取紀錄(課)[排序欄位];
+}
+function 排序課次(課次){
+  if(!排序欄位)return 課次;
+  return [...課次].sort((甲,乙)=>{
+    const 左=排序值(甲),右=排序值(乙);
+    // 未登記分數與未分時段不論排序方向，都放在最後；零分仍是有效分數。
+    if(排序欄位==='score' || 排序欄位==='time'){
+      if(左==='' && 右!=='')return 1;
+      if(右==='' && 左!=='')return -1;
+    }
+    const 差=typeof 左==='number' && typeof 右==='number' ? 左-右 : String(左).localeCompare(String(右),'zh-Hant',{numeric:true});
+    return 差*排序方向;
+  });
+}
+function 更新排序標示(){
+  document.querySelectorAll('[data-sort]').forEach(按鈕=>按鈕.closest('th').setAttribute('aria-sort','none'));
+  document.querySelectorAll('[data-sort]').forEach(按鈕=>{
+    const 已選=按鈕.dataset.sort===排序欄位;
+    按鈕.textContent=按鈕.dataset.label+' '+(已選?(排序方向===1?'↑':'↓'):'↕');
+    按鈕.classList.toggle('active',已選);
+    按鈕.setAttribute('aria-label',按鈕.dataset.label+'，點選'+(已選 && 排序方向===1?'降冪':'升冪')+'排序');
+    if(已選)按鈕.closest('th').setAttribute('aria-sort',排序方向===1?'ascending':'descending');
+  });
+}
+document.querySelectorAll('[data-sort]').forEach(按鈕=>按鈕.addEventListener('click',()=>{
+  排序方向=排序欄位===按鈕.dataset.sort?-排序方向:1;排序欄位=按鈕.dataset.sort;顯示名單();
+}));
+function 顯示課次() { const 搜尋 = 取得('search').value.trim(); return 範圍課次().filter(課=>{const 記 = 讀取紀錄(課); return (!搜尋 || 課.student.name.includes(搜尋)) && (篩選==='all' || (篩選==='pending' ? 記.arrival===0 : 記.homework<2 || 記.assessment<2));}); }
+function 顯示名單(焦點) {
+  更新選單();
+  const 全部 = 範圍課次(); const 顯示 = 排序課次(顯示課次());
+  更新排序標示();
+  取得('total-count').textContent = new Set(全部.map(課=>課.student.id)).size;
+  取得('arrival-count').textContent = 全部.filter(課=>[1,2].includes(讀取紀錄(課).arrival)).length;
+  取得('arrival-total').textContent = '／ '+全部.length+' 筆';
+  取得('homework-count').textContent = 全部.filter(課=>讀取紀錄(課).homework===2).length;
+  取得('assessment-count').textContent = 全部.filter(課=>讀取紀錄(課).assessment===2).length;
+  const 當日編號 = [...new Set(全部.map(課=>課.student.id))];
+  取得('meal-ordered-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號)>0).length;
+  取得('meal-waiting-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號)===1).length;
+  取得('meal-eaten-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號)===2).length;
+  取得('list-count').textContent = 全部.length+' 筆課次';
+  取得('shown-count').textContent = '顯示 '+顯示.length+' 筆課次';
+  取得('day-label').textContent = new Date(取得('record-date').value+'T12:00:00').toLocaleDateString('zh-TW',{weekday:'long'})+'・依每週排課';
+  取得('schedule-notice').textContent = '已建立 '+資料.students.length+' 位學生、'+資料.classes.length+' 個班級。每班課次分別記錄；包套保留原班級，不拆成重複課次。假日與臨時調課需另行確認。';
+  const 容器 = 取得('student-rows'); 容器.replaceChildren();
+  取得('empty-state').hidden = 顯示.length>0;
+  取得('empty-state').querySelector('h3').textContent = 全部.length ? '沒有符合條件的課次' : '這一天沒有符合篩選的排課';
+  取得('empty-state').querySelector('p').textContent = '可切換日期或篩選條件，或查看每週課表。';
+  for (const 課 of 顯示) {
+    const 記 = 讀取紀錄(課); const 列 = 元素('tr'); const 姓名格 = 元素('td'); const 姓名區 = 元素('div','student-info');
+    姓名區.append(元素('span','avatar',課.student.name.slice(-2)));
+    const 姓名 = 元素('button','student-name',課.student.name); 姓名.title='編輯姓名與年級'; 姓名.append(元素('small','',課.student.grade || '未填年級')); 姓名.addEventListener('click',()=>開啟學生(課.student)); 姓名區.append(姓名);
+    姓名格.append(姓名區,元素('div','lesson-class',課.department+'・'+課.className),元素('div','lesson-time',課.start ? 課.start+'–'+課.end : '未分時段')); 列.append(姓名格);
+    for (const 欄 of Object.keys(狀態選項)) {
+      const 值 = 記[欄]; const 樣式 = 欄==='exam' ? (值===1?'good':'') : 值===3 ? 'leave' : 欄==='arrival' ? (值>0?'good':'') : 值===2?'good':值===1?'working':'';
+      const 按鈕 = 元素('button','status '+樣式,狀態選項[欄][值]); 按鈕.id=課.key+'-'+欄;
+      const 欄名 = {arrival:'到班',homework:'作業',assessment:'評量',exam:'考卷進度'}[欄];
+      按鈕.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'，'+欄名+'：'+狀態選項[欄][值]+'；點選改為'+狀態選項[欄][(值+1)%狀態選項[欄].length]);
+      按鈕.addEventListener('click',()=>{修改紀錄(課,欄,(值+1)%狀態選項[欄].length);保存();顯示名單(按鈕.id);});
+      const 格=元素('td');格.append(按鈕);列.append(格);
+    }
+    const 分數格 = 元素('td'); const 分數欄 = 元素('input','exam-score');
+    分數欄.id=課.key+'-score';分數欄.type='number';分數欄.min='0';分數欄.max='100';分數欄.step='any';分數欄.inputMode='decimal';分數欄.value=記.score;分數欄.placeholder='未登記';
+    分數欄.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的考卷分數，零至一百分');
+    分數欄.title='0～100 分，可填小數；留白表示尚未登記';
+    分數欄.addEventListener('change',()=>{
+      const 分數=分數欄.value===''?'':Number(分數欄.value);
+      if(分數欄.validity.badInput || !分數有效(分數)){分數欄.value=讀取紀錄(課).score;通知('分數未保存，請輸入 0～100 分；留白表示未登記。');return;}
+      修改紀錄(課,'score',分數);保存();if(排序欄位==='score')顯示名單(分數欄.id);
+    });
+    分數格.append(分數欄);列.append(分數格);
+    const 訂餐值 = 讀取訂餐(課.student.id);
+    const 訂餐按鈕 = 元素('button','status '+(訂餐值===2?'good':訂餐值===1?'working':''),訂餐選項[訂餐值]);
+    訂餐按鈕.id=課.key+'-meal';
+    訂餐按鈕.setAttribute('aria-label',課.student.name+'當天訂餐：'+訂餐選項[訂餐值]+'；點選改為'+訂餐選項[(訂餐值+1)%訂餐選項.length]);
+    訂餐按鈕.title='同一學生當天跨班共用，重複點選可更正';
+    訂餐按鈕.addEventListener('click',()=>{切換訂餐(課.student.id);保存();顯示名單(訂餐按鈕.id);});
+    const 訂餐格=元素('td');訂餐格.append(訂餐按鈕);列.append(訂餐格);
+    const 格=元素('td');const 備註=元素('input','note');備註.value=記.note;備註.maxLength=500;備註.placeholder='記下這堂課的提醒…';備註.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的備註');備註.addEventListener('input',()=>{修改紀錄(課,'note',備註.value);保存();});格.append(備註);列.append(格);
+    // 請假時保留備註供填寫原因，其餘後續欄位鎖定，原有紀錄不變。
+    if(記.arrival===3){
+      列.classList.add('leave-row');
+      備註.placeholder='填寫請假原因…';
+      備註.setAttribute('aria-label',課.student.name+'，'+課.className+'的請假原因與備註');
+      列.querySelectorAll('td:nth-child(n+3) button, td:nth-child(n+3) input:not(.note)').forEach(控制=>{
+        控制.disabled=true;控制.title='此課次已請假，請先變更到班狀態再登記';
+      });
+    }
+    容器.append(列);
+  }
+  if (焦點) 取得(焦點)?.focus();
+}
+function 開啟學生(學生) {
+  編輯編號=學生?.id || null;取得('dialog-title').textContent=學生?'編輯學生資料':'新增學生';取得('student-name').value=學生?.name || '';取得('student-grade').value=學生?.grade || '';
+  取得('student-enrollment-field').hidden=Boolean(學生);
+  設定選單('student-enrollment',資料.classes.flatMap(班=>班.groups.map((組,序)=>[班.id+':'+序,班級名稱(班)+'・'+每週文字(組.slots)])),'先不分班');
+  取得('student-enrollment').value='';取得('student-dialog').showModal();取得('student-name').focus();
+}
+取得('add-student').addEventListener('click',()=>開啟學生());
+取得('close-dialog').addEventListener('click',()=>取得('student-dialog').close());
+取得('student-form').addEventListener('submit',事件=>{
+  事件.preventDefault();const 姓名=取得('student-name').value.trim();if(!姓名)return;
+  if (編輯編號) Object.assign(資料.students.find(人=>人.id===編輯編號),{name:姓名,grade:取得('student-grade').value.trim()});
+  else {const 學生={id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value};資料.students.push(學生);
+    if(取得('student-enrollment').value){const [班,組]=取得('student-enrollment').value.split(':');資料.classes.find(項=>項.id===班).groups[Number(組)].studentIds.push(學生.id);}
+  }
+  保存();顯示名單();取得('student-dialog').close();
+});
+function 換日(差){const 日=new Date(取得('record-date').value+'T12:00:00');日.setDate(日.getDate()+差);const 值=日.getFullYear()+'-'+String(日.getMonth()+1).padStart(2,'0')+'-'+String(日.getDate()).padStart(2,'0');if(日期有效(值)){取得('record-date').value=值;取得('time-filter').value='';顯示名單();}}
+取得('previous-day').addEventListener('click',()=>換日(-1));取得('next-day').addEventListener('click',()=>換日(1));
+取得('today').addEventListener('click',()=>{取得('record-date').value=今日();取得('time-filter').value='';顯示名單();});
+取得('record-date').addEventListener('change',()=>{if(!日期有效(取得('record-date').value))取得('record-date').value=今日();取得('time-filter').value='';顯示名單();});
+取得('search').addEventListener('input',()=>顯示名單());
+function 部門變更(){取得('class-filter').value='';取得('time-filter').value='';顯示名單();}
+取得('department-filter').addEventListener('change',()=>{已選部門=new Set([...取得('department-filter').querySelectorAll('input:checked')].map(項=>項.value));部門變更();});
+取得('department-all').addEventListener('click',()=>{已選部門=null;部門變更();});
+取得('department-none').addEventListener('click',()=>{已選部門=new Set();部門變更();});
+for(const 識別 of ['class-filter','time-filter'])取得(識別).addEventListener('change',()=>{if(識別==='class-filter')取得('time-filter').value='';顯示名單();});
+document.querySelectorAll('[data-filter]').forEach(按鈕=>按鈕.addEventListener('click',()=>{篩選=按鈕.dataset.filter;document.querySelectorAll('[data-filter]').forEach(項=>{項.classList.toggle('active',項===按鈕);項.setAttribute('aria-pressed',String(項===按鈕));});顯示名單();}));
+取得('mark-arrived').addEventListener('click',()=>{const 待到=顯示課次().filter(課=>讀取紀錄(課).arrival===0);if(!待到.length){通知('目前沒有尚未到班的課次');return;}if(!confirm('將目前顯示的 '+待到.length+' 筆未到課次標記為已到班？'))return;待到.forEach(課=>修改紀錄(課,'arrival',1));保存();顯示名單();});
+function 下載(內容,檔名,類型){const 網址=URL.createObjectURL(new Blob([內容],{type:類型}));const 連結=元素('a');連結.href=網址;連結.download=檔名;連結.click();setTimeout(()=>URL.revokeObjectURL(網址),1000);}
+function 表格文字(文字){let 值=String(文字);if(/^\s*[=+@-]/.test(值))值="'"+值;return '"'+值.replaceAll('"','""')+'"';}
+取得('backup').addEventListener('click',()=>下載(JSON.stringify(資料,null,2),'小日常完整備份-'+今日()+'.json','application/json'));
+取得('export-record').addEventListener('click',()=>{const 列=[['日期','姓名','年級','部門','班級','開始','結束','到班','作業','評量','考卷進度','考卷分數','當天訂餐（同生跨班共用）','備註']];範圍課次().forEach(課=>{const 記=讀取紀錄(課);列.push([取得('record-date').value,課.student.name,課.student.grade,課.department,課.className,課.start,課.end,狀態選項.arrival[記.arrival],狀態選項.homework[記.homework],狀態選項.assessment[記.assessment],狀態選項.exam[記.exam],記.score,訂餐選項[讀取訂餐(課.student.id)],記.note]);});下載('\uFEFF'+列.map(項=>項.map(表格文字).join(',')).join('\r\n'),'班級紀錄-'+取得('record-date').value+'.csv','text/csv;charset=utf-8');});
+取得('restore').addEventListener('click',()=>取得('restore-file').click());
+取得('restore-file').addEventListener('change',async 事件=>{
+  const 檔=事件.target.files[0];if(!檔)return;
+  try{if(檔.size>10000000)throw new Error('檔案過大');const 新=JSON.parse(await 檔.text());if(!資料有效(新))throw new Error('格式不符');
+    if(!confirm('還原會以備份取代目前資料，請先備份。確定還原？'))return;
+    新.classes ||= [];新.lessonDays ||= {};新.meals ||= {};
+    localStorage.setItem(儲存鍵,JSON.stringify(新));資料=新;允許儲存=true;取得('save-state').textContent='備份已還原';顯示名單();通知('備份已還原，原版與班級課次紀錄皆可讀取。');
+  }catch{通知('未還原：備份格式不正確、檔案過大，或無法保存。');}finally{事件.target.value='';}
+});
+function 顯示課表(){
+  const 容器=取得('week-content');容器.replaceChildren();
+  const 班號=取得('class-filter').value;
+  for(const 班 of 資料.classes.filter(項=>(部門符合(項.department))&&(!班號 || 項.id===班號))){
+    const 卡=元素('article','week-card');卡.append(元素('h3','',班.department+'・'+班級名稱(班)));
+    if(班.id==='c235')卡.append(元素('p','schedule-warning','班名寫二、三、五，時間設定為二、四、五；以下沿用時間設定。'));
+    if(班.id==='c243')卡.append(元素('p','schedule-warning','班名寫三、四、五，時間設定為二、三、五；以下沿用時間設定。'));
+    for(const 組 of 班.groups){卡.append(元素('p','week-names',組.studentIds.map(編=>資料.students.find(人=>人.id===編)?.name || '').join('、')),元素('p','week-times',每週文字(組.slots)));}
+    容器.append(卡);
+  }
+  if(!容器.children.length)容器.append(元素('p','','此篩選範圍沒有每週課表。'));
+  取得('week-dialog').showModal();
+}
+取得('show-week').addEventListener('click',顯示課表);取得('close-week').addEventListener('click',()=>取得('week-dialog').close());
 
-// 本次提供的名單只保留姓名與年級；不帶入卡號或家庭聯絡資料。
 const 米豆奶名單 = [
   {
     "id": "smido448885b9dda9214e",
@@ -967,54 +1135,974 @@ const 米豆奶名單 = [
     "grade": "高一"
   }
 ];
+const 課表範本 = [
+  {
+    "id": "c234",
+    "name": "2-3幼兒美語班[團][1.5hr]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidobc8a984bc22cb40e",
+          "smido55167902c2bfa339"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "17:30",
+            "end": "19:00"
+          },
+          {
+            "day": 3,
+            "start": "17:30",
+            "end": "19:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c271",
+    "name": "安親班[個][單日]",
+    "department": "安親",
+    "groups": [
+      {
+        "studentIds": [
+          "smido6165c9c51a395485"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      },
+      {
+        "studentIds": [
+          "smidob46a9244975442bd"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      },
+      {
+        "studentIds": [
+          "smidof28adefc09e305fd"
+        ],
+        "slots": [
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      },
+      {
+        "studentIds": [
+          "smido346a58718e58be28",
+          "smido7f8b2abae1925fca"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c277",
+    "name": "安親班(低年級)[團]",
+    "department": "安親",
+    "groups": [
+      {
+        "studentIds": [
+          "smido3b02c1389c26161d"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:00",
+            "end": "18:00"
+          },
+          {
+            "day": 2,
+            "start": "16:00",
+            "end": "18:00"
+          },
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "16:00",
+            "end": "18:00"
+          },
+          {
+            "day": 5,
+            "start": "16:00",
+            "end": "18:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c3",
+    "name": "安親班(中高年級)[團][含數課]",
+    "department": "安親",
+    "groups": [
+      {
+        "studentIds": [
+          "smido5b37c9bb2e97ca9e",
+          "smido6d63d82ce2f5ca1c",
+          "smidob538f3dd8395ba50",
+          "smido0e7314c1d453e590",
+          "smido4dc17f640e382a7e",
+          "smido0387f7f36c8526d3",
+          "smido7cc505b010d8493b",
+          "smidoeb91d00d53fd23d0",
+          "smido0afecc8075ccaab4",
+          "smido4c16a5993fd64247"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:00",
+            "end": "20:00"
+          },
+          {
+            "day": 2,
+            "start": "16:00",
+            "end": "20:00"
+          },
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "19:00"
+          },
+          {
+            "day": 4,
+            "start": "16:00",
+            "end": "20:00"
+          },
+          {
+            "day": 5,
+            "start": "16:00",
+            "end": "20:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c88",
+    "name": "包套課程(美、特、安、數)[團]",
+    "department": "包套",
+    "groups": [
+      {
+        "studentIds": [
+          "smido8686c76d502a3062",
+          "smido427bb291d44492db",
+          "smidod158e013118de08d",
+          "smidofbed4f7dd97d8425"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:00",
+            "end": "19:30"
+          },
+          {
+            "day": 2,
+            "start": "16:00",
+            "end": "19:30"
+          },
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "19:30"
+          },
+          {
+            "day": 4,
+            "start": "16:00",
+            "end": "19:30"
+          },
+          {
+            "day": 5,
+            "start": "16:00",
+            "end": "19:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c28",
+    "name": "包套課程(美、數、安)[團]",
+    "department": "包套",
+    "groups": [
+      {
+        "studentIds": [
+          "smido022577e5a338d9d6",
+          "smido5a3a5c93c2b4fe11",
+          "smido0e7314c1d453e590"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 3,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c80",
+    "name": "安親-兩堂美語[團][6700]",
+    "department": "包套",
+    "groups": [
+      {
+        "studentIds": [
+          "smido264212b721d087ad"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:00",
+            "end": "19:00"
+          },
+          {
+            "day": 2,
+            "start": "16:00",
+            "end": "19:00"
+          },
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "17:30"
+          },
+          {
+            "day": 4,
+            "start": "16:00",
+            "end": "19:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "17:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c248",
+    "name": "數學班[個][國小]",
+    "department": "數學",
+    "groups": [
+      {
+        "studentIds": [
+          "smido6aa889092d007bea"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      },
+      {
+        "studentIds": [
+          "smidoa20d9878ba01a049"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      },
+      {
+        "studentIds": [
+          "smido1cb689fdecf44a44",
+          "smido13fac69c051e108a"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 3,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      },
+      {
+        "studentIds": [
+          "smidoa5e3c23d56c22e36"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c281",
+    "name": "1-4美語班[團][4級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido309b42ef600c96e9"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c269",
+    "name": "1-4-5美語班[團][4級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoaf911b15c28ca1d5",
+          "smidob8c92a64d09d6f80"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c270",
+    "name": "1-4-5美語班[團][4級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido2006e2a0151a0ca0"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c227",
+    "name": "5美語班[團][7級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoed50371bd08c7006"
+        ],
+        "slots": [
+          {
+            "day": 5,
+            "start": "14:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c279",
+    "name": "3-5 美語班[團][7級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidod471929365c20eca",
+          "smido0913bb597898c3bd",
+          "smido8a3094644276283c"
+        ],
+        "slots": [
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c235",
+    "name": "2-3-5美語班[團][7級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoc981d6860b27a1c3"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 4,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c280",
+    "name": "1-2-3 美語班[團][7級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoe99f510f6b89ae63",
+          "smidof28adefc09e305fd"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 3,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c268",
+    "name": "1-4美語班[團][8級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidob4c3a87dd4652551",
+          "smido0387f7f36c8526d3",
+          "smidoa3f383d86e12f43c",
+          "smidob538f3dd8395ba50",
+          "smido8f8aa4fe0d062638",
+          "smidoa20d9878ba01a049",
+          "smido645644960685891b",
+          "smido3b5ae42b0c203333"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "17:30",
+            "end": "19:30"
+          },
+          {
+            "day": 4,
+            "start": "17:30",
+            "end": "19:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c275",
+    "name": "1-5美語班[團][9級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoc4fbd25d160d09fe"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c256",
+    "name": "1-5美語班[團][9級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidof62b73713eba9e96",
+          "smido5e69699330aa06f9"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c226",
+    "name": "1-2-5美語班[團][9級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido390cd972eddf1d27"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c255",
+    "name": "1-2-4美語班[團][9級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido77b52de1897aa3ab",
+          "smidoeb91d00d53fd23d0"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c228",
+    "name": "1-4美語班[團][9級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido6d63d82ce2f5ca1c",
+          "smido1a8695078b140f91"
+        ],
+        "slots": [
+          {
+            "day": 1,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c243",
+    "name": "3-4-5美語班[團][10級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido13fac69c051e108a"
+        ],
+        "slots": [
+          {
+            "day": 2,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "14:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c244",
+    "name": "3-4-5美語班[團][10級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoa5e3c23d56c22e36",
+          "smido4c16a5993fd64247",
+          "smido7671ee00d6bc8abe"
+        ],
+        "slots": [
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "16:30",
+            "end": "18:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c245",
+    "name": "3-5美語班[團][10級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido0a134922440916d5",
+          "smidob85c59ca8fb61537"
+        ],
+        "slots": [
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c250",
+    "name": "3-5美語班[團][12級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smidoe3e20a2db8c1c924"
+        ],
+        "slots": [
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "c251",
+    "name": "3-4-5美語班[團][12級]",
+    "department": "美語",
+    "groups": [
+      {
+        "studentIds": [
+          "smido4dc17f640e382a7e",
+          "smido0e7314c1d453e590",
+          "smido7cc505b010d8493b"
+        ],
+        "slots": [
+          {
+            "day": 3,
+            "start": "13:00",
+            "end": "16:00"
+          },
+          {
+            "day": 4,
+            "start": "16:30",
+            "end": "18:30"
+          },
+          {
+            "day": 5,
+            "start": "13:00",
+            "end": "16:00"
+          }
+        ]
+      }
+    ]
+  }
+];
 
-// 只有年級資料，無法證明已加入安親或美語班，因此只提供核對預覽。
-function 準備匯入() {
-  return 米豆奶名單.filter(學生 => {
-    const 符合年級 = /^(小[一二三四五六]|[小中大]班)$/.test(學生.grade);
-    return 取得('import-scope').value === 'excluded' ? !符合年級 : 符合年級;
+// 班級資料取自米豆奶的入班名冊與時間設定；相同班名仍以原班級分開。
+const 匯入學生編號 = new Set(課表範本.flatMap(班=>班.groups.flatMap(組=>組.studentIds)));
+function 準備匯入(){
+  return 米豆奶名單.filter(人=>{
+    const 年級符合=/^(小[一二三四五六]|[小中大]班)$/.test(人.grade);
+    const 範圍=取得('import-scope').value;
+    return 範圍==='excluded' ? !年級符合 : 範圍==='pending' ? 年級符合&&!匯入學生編號.has(人.id) : 年級符合&&匯入學生編號.has(人.id);
   });
 }
-function 顯示匯入預覽() {
-  const 名單 = 準備匯入();
-  const 不納入 = 取得('import-scope').value === 'excluded';
-  取得('import-summary').textContent = 不納入 ? `${名單.length} 位屬其他年級或未填年級，本次不納入。` : `${名單.length} 位國小與幼兒園學生待核對安親、美語入班資料；目前尚未匯入。`;
-  取得('confirm-import').textContent = 不納入 ? '本次不納入' : '等待入班名冊，暫不匯入';
-  取得('confirm-import').disabled = true;
+// 用原識別碼或唯一同名學生合併；不覆蓋姓名、既有班級或每日紀錄。
+function 合併來源(){
+  const 新=JSON.parse(JSON.stringify(資料));const 對應=new Map();
+  for(const 人 of 米豆奶名單.filter(項=>匯入學生編號.has(項.id))){
+    let 原=新.students.find(項=>項.id===人.id);
+    if(!原){const 同名=新.students.filter(項=>項.name.trim()===人.name);if(同名.length>1)throw new Error('名單有同名學生，請先核對');原=同名[0];}
+    if(!原){原={...人,start:'2026-09-20'};新.students.push(原);}
+    對應.set(人.id,原.id);
+  }
+  for(const 來源 of 課表範本){
+    let 班=新.classes.find(項=>項.id===來源.id);
+    if(!班){班={id:來源.id,name:來源.name,department:來源.department,groups:[]};新.classes.push(班);}
+    for(const 來源組 of 來源.groups){
+      const 時段=JSON.stringify(來源組.slots);
+      let 組=班.groups.find(項=>JSON.stringify(項.slots)===時段);
+      if(!組){組={studentIds:[],slots:來源組.slots.map(項=>({...項}))};班.groups.push(組);}
+      for(const 編 of 來源組.studentIds){const 實際編號=對應.get(編);if(!組.studentIds.includes(實際編號))組.studentIds.push(實際編號);}
+    }
+  }
+  if(!資料有效(新))throw new Error('名單或課表驗證失敗');
+  return 新;
+}
+function 顯示匯入預覽(){
+  const 名單=準備匯入();const 符合=取得('import-scope').value==='school';
+  取得('import-summary').textContent=符合 ? '55 位已核對學生、26 個班級。重複匯入會合併，不重複建立；現有紀錄保留。' : '此清單本次不匯入，保留供你核對。';
+  取得('confirm-import').disabled=!符合;
+  取得('confirm-import').textContent=符合?'合併已核對名單與課表':'本次不納入';
   取得('import-rows').replaceChildren();
-  for (const 學生 of 名單) {
-    const 列 = 元素('tr');
-    列.append(元素('td', '', 學生.name), 元素('td', '', 學生.grade || '未填'), 元素('td', '', 不納入 ? '本次不納入' : '入班待核對'));
+  for(const 人 of 名單){
+    const 列=元素('tr');const 班名=課表範本.filter(班=>班.groups.some(組=>組.studentIds.includes(人.id))).map(班=>班.name).join('、');
+    列.append(元素('td','',人.name),元素('td','',人.grade||'未填'),元素('td','import-class-list',符合?班名:取得('import-scope').value==='pending'?'未加入安親、美語、數學或包套班':'年級不在本次範圍'));
     取得('import-rows').append(列);
   }
 }
-取得('import-roster').addEventListener('click', () => { 顯示匯入預覽(); 取得('import-dialog').showModal(); });
-取得('close-import').addEventListener('click', () => 取得('import-dialog').close());
-取得('import-scope').addEventListener('change', 顯示匯入預覽);
-
-
-// 帳號分開儲存；舊版共用資料保留原處，不自動歸給第一位登入者。
-function 清空() {
-  資料 = { version: 1, students: [], days: {} };
-  儲存鍵 = '';
-  允許儲存 = false;
-  編輯編號 = null;
-  取得('student-form').reset();
-  取得('search').value = '';
-  取得('import-rows').replaceChildren();
-  取得('toast').hidden = true;
+取得('import-roster').addEventListener('click',()=>{顯示匯入預覽();取得('import-dialog').showModal();});
+取得('close-import').addEventListener('click',()=>取得('import-dialog').close());
+取得('import-scope').addEventListener('change',顯示匯入預覽);
+取得('confirm-import').addEventListener('click',()=>{
+  if(取得('import-scope').value!=='school')return;
+  try{
+    if(!允許儲存 || !儲存鍵)throw new Error('尚未開放儲存');
+    const 新=合併來源();localStorage.setItem(儲存鍵,JSON.stringify(新));資料=新;
+    取得('save-state').textContent='名單與課表已保存';取得('import-dialog').close();顯示名單();通知('已合併核對名單與課表，原有紀錄保留。');
+  }catch{通知('未匯入：可能有同名學生需核對，或瀏覽器無法保存資料。');}
+});
+function 清空(){
+  資料=空資料();儲存鍵='';允許儲存=false;編輯編號=null;篩選='all';
+  取得('record-date').value=今日();取得('student-form').reset();取得('search').value='';
+  已選部門=null;排序欄位='';排序方向=1;
+  for(const 名 of ['class-filter','time-filter'])取得(名).value='';
+  document.querySelectorAll('[data-filter]').forEach(項=>{項.classList.toggle('active',項.dataset.filter==='all');項.setAttribute('aria-pressed',String(項.dataset.filter==='all'));});
+  取得('import-rows').replaceChildren();取得('week-content').replaceChildren();取得('toast').hidden=true;clearTimeout(通知計時);顯示名單();
+}
+function 載入(使用者編號){
+  清空();儲存鍵=本機模式?'小日常班級紀錄第一版':'小日常班級紀錄第一版:'+使用者編號;允許儲存=true;
+  取得('save-state').textContent=本機模式?'本機紀錄自動保存':'此帳號的紀錄自動保存';
+  try{
+    const 原=localStorage.getItem(儲存鍵);
+    if(原){const 內容=JSON.parse(原);if(!資料有效(內容))throw new Error('紀錄格式錯誤');資料={...內容,classes:內容.classes||[],lessonDays:內容.lessonDays||{},meals:內容.meals||{}};}
+    else{資料=合併來源();保存();}
+  }catch{允許儲存=false;取得('save-state').textContent='無法讀取原有紀錄';通知('原有資料無法讀取，請先保留備份並確認格式。');}
   顯示名單();
 }
-function 載入(使用者編號) {
-  清空();
-  儲存鍵 = 本機模式 ? '小日常班級紀錄第一版' : '小日常班級紀錄第一版:' + 使用者編號;
-  允許儲存 = true;
-  取得('save-state').textContent = 本機模式 ? '本機紀錄自動保存' : '此帳號的紀錄自動保存';
-try { const 原始資料 = localStorage.getItem(儲存鍵); if (原始資料) { const 內容 = JSON.parse(原始資料); if (!資料有效(內容)) throw new Error('紀錄格式不正確'); 資料 = 內容; } } catch { 允許儲存 = false; 取得('save-state').textContent = '無法讀取儲存資料'; 通知('無法讀取原有資料；請還原有效備份，或先備份本次紀錄。'); }
-
-顯示名單();
-}
-return { 載入, 清空 };
+return {載入,清空};
 }
 
 

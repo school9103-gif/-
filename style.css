@@ -44,3 +44,54 @@
 .auth-account{display:grid;gap:12px;margin-top:24px;font-size:12px;overflow-wrap:anywhere}
 .nav-current{text-decoration:none}
 .local-mode-notice{padding:14px 18px;background:#fff7e6;border:1px solid #f0e5c9;border-radius:10px;color:#806345;font-size:14px;line-height:1.8}
+
+/* 班級與個別時段保持在表格旁，窄螢幕改成單欄篩選。 */
+.class-controls{display:grid;grid-template-columns:140px minmax(180px,1fr) 170px auto;gap:12px;align-items:end;margin-bottom:14px}
+.class-controls label{font-size:13px;color:#61796e;display:flex;flex-direction:column;gap:7px}
+.class-controls select,dialog select{font:inherit;color:#365e4e;background:white;border:1px solid #d9e3dd;border-radius:8px;padding:10px;width:100%;min-width:0}
+.class-controls button{font-size:13px;white-space:nowrap}
+.schedule-notice{font-size:12px;line-height:1.8;color:#7b867d;margin:0 0 20px}
+.lesson-class{font-size:12px;line-height:1.6;margin-top:9px;max-width:290px;white-space:normal;color:#678274}
+.lesson-time{font-size:13px;color:#21705a;margin-top:3px;font-variant-numeric:tabular-nums}
+#import-dialog{width:min(760px,calc(100% - 32px))}
+.import-class-list{white-space:normal;min-width:170px;font-size:12px;line-height:1.7}
+#week-dialog{width:min(900px,calc(100% - 32px));max-height:88vh;overflow:auto}
+#week-content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.week-card{padding:16px;border:1px solid var(--line);border-radius:12px;background:#fbfdfa}
+.week-card h3{font-size:15px;line-height:1.7;margin:0 0 8px}
+.week-card .week-names{font-size:13px;margin:12px 0 3px;color:#3b6351}
+.week-card .week-times{font-size:12px;line-height:1.9;margin:0;color:#6c7e71}
+.week-card .schedule-warning{font-size:12px;background:#fff1cf;color:#865b16;padding:9px;border-radius:7px;line-height:1.7}
+@media(max-width:1150px){.class-controls{grid-template-columns:1fr 2fr}.class-controls button{height:40px}}
+@media(max-width:600px){.class-controls{grid-template-columns:1fr}.class-controls label{font-size:14px}#week-content{grid-template-columns:1fr}.lesson-class{max-width:210px;min-width:150px}}
+
+/* 訂餐統計以學生去重；小螢幕自然換行，不擠壓表格按鈕。 */
+.meal-summary{display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;padding:15px 24px;background:#fffbef;border-top:1px solid #f1ead7;color:#74613a;font-size:13px}
+.meal-summary strong{font-size:14px;color:#6c5229}
+.meal-summary b{font-size:18px;margin:0 4px;font-variant-numeric:tabular-nums}
+.meal-summary small{flex-basis:100%;font-size:12px;line-height:1.7;color:#8b7e62}
+@media(max-width:600px){.meal-summary{padding:14px 16px;gap:10px 16px}.meal-summary strong{flex-basis:100%}}
+
+.exam-score{width:92px;min-height:38px;border:1px solid #dce7e1;border-radius:8px;background:#fbfdfc;padding:8px 10px;color:#365e4e;font-size:14px;font-variant-numeric:tabular-nums}
+.exam-score::placeholder{color:#8c9c93;font-size:12px}
+.exam-score:invalid{border-color:#ba5a44;background:#fff5f2}
+
+/* 部門勾選獨立一列，方便直接點選。 */
+.class-controls{grid-template-columns:minmax(180px,1fr) 170px auto}
+.department-picker{grid-column:1/-1;min-width:0;margin:0;padding:12px 14px;border:1px solid #d9e3dd;border-radius:12px;background:#fff}
+.department-picker legend{padding:0 6px;font-size:13px;color:#365e4e}
+.department-picker button{padding:7px 12px}
+#department-filter{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+#department-filter label{flex-direction:row;align-items:center;gap:8px;padding:10px 12px;background:#f2f7f4;border-radius:8px;cursor:pointer;color:#365e4e}
+#department-filter input{width:18px;height:18px;margin:0;accent-color:#287d67}
+#department-filter label:has(input:checked){background:#dff2e9}
+#department-filter label:focus-within{outline:2px solid #287d67;outline-offset:2px}
+@media(max-width:600px){.class-controls{grid-template-columns:1fr}}
+
+/* 各欄可用滑鼠或鍵盤切換排序。 */
+.sort-button{border:0;background:transparent;padding:5px 2px;font:inherit;color:inherit;white-space:nowrap}
+.sort-button:hover,.sort-button.active{color:#186c60;background:#e8f3ef}
+.sort-button:focus-visible{outline:2px solid #287d67;outline-offset:2px}
+
+.leave-row td:nth-child(n+3){background:#faf9fc}
+.leave-row button:disabled,.leave-row input:disabled{opacity:.5;cursor:not-allowed}
