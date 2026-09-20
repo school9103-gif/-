@@ -9,30 +9,62 @@
   <script src="script.js" defer></script>
 </head>
 <body>
+  <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
+    <div class="auth-card">
+      <span class="brand-icon">日</span><h1 id="auth-title">登入小日常</h1>
+      <p>登入後，繼續記錄孩子的每一步。</p>
+      <form id="auth-form">
+        <label for="auth-email">電子郵件</label><input id="auth-email" type="email" autocomplete="username" required>
+        <label for="auth-password">密碼</label><input id="auth-password" type="password" autocomplete="current-password" required>
+        <button id="auth-submit" class="primary" type="submit" disabled>登入</button>
+      </form>
+      <p id="auth-message" role="status" aria-live="polite">正在準備登入服務…</p>
+      <button id="auth-retry" type="button">重新檢查連線</button>
+      <p class="auth-help">請使用管理員建立的帳號。需要帳號或忘記密碼時，請聯絡管理員。</p>
+      <noscript>請啟用瀏覽器的指令碼功能，才能登入。</noscript>
+    </div>
+  </section>
+  <div id="protected-app" hidden inert>
   <aside class="sidebar">
     <a class="brand" href="index.html"><span class="brand-icon">日</span><span>小日常<small>安親班紀錄本</small></span></a>
     <div class="nav-caption">班級工作台</div>
-    <div class="nav-current">▦ <span>每日紀錄</span></div>
+    <a class="nav-current" href="#records">▦ <span>每日紀錄</span></a>
+    <div class="auth-account"><span id="auth-account"></span><button id="auth-signout" type="button">登出</button></div>
     <div class="sidebar-bottom"><span class="small-icon">✓</span><strong>把時間留給孩子</strong><p>每一個小進步，<br>都值得好好記下來。</p></div>
   </aside>
   <main>
     <header><span>班級工作台 <span class="breadcrumb">／ 每日紀錄</span></span><span id="save-state" role="status">紀錄自動保存</span></header>
+    <p id="local-mode-notice" class="local-mode-notice" role="status" hidden>目前使用本機模式，無須登入。雲端專案與管理員帳號尚未設定，登入保護尚未啟用；紀錄仍儲存在這台裝置的瀏覽器。</p>
     <section class="heading school-heading">
       <img class="school-picture" src="補習班插畫.png" alt="黃老師與愛美語補習班的可愛門面插畫，搭配紅黃招牌與藍色玻璃門" width="1536" height="1024">
       <div class="heading-copy"><div class="eyebrow">黃老師・愛美語 <span class="school-tag">安親小日常</span></div><h1>每日班級紀錄<span class="title-dot">.</span></h1><p>到班、作業、評量，<br class="mobile-break">一起記下孩子的每一步。</p></div>
-      <button id="add-student" class="primary">＋ 新增學生</button>
+      <div class="heading-actions"><button id="add-student" class="primary">＋ 新增學生</button><button id="import-roster">匯入米豆奶名單</button></div>
     </section>
     <section class="date-bar"><div class="date-controls"><button id="previous-day" aria-label="前一天">‹</button><label for="record-date" class="sr-only">紀錄日期</label><input id="record-date" type="date"><button id="next-day" aria-label="後一天">›</button><button id="today">回到今天</button></div><span id="day-label"></span></section>
-    <section class="stats" aria-label="當日摘要"><article><span>班級學生</span><div><strong id="total-count">0</strong><small>位學生</small></div><i>全班名單</i></article><article><span>已到班</span><div><strong id="arrival-count">0</strong><small id="arrival-total">／ 0 位</small></div><i class="teal">含已離班學生</i></article><article><span>作業已完成</span><div><strong id="homework-count">0</strong><small>位學生</small></div><i>今天的努力，記下來</i></article><article><span>評量已完成</span><div><strong id="assessment-count">0</strong><small>位學生</small></div><i>一步一步累積進步</i></article></section>
+    <section class="class-controls" aria-label="部門班級時段篩選"><label>部門<select id="department-filter"><option value="">全部部門</option></select></label><label>班級<select id="class-filter"><option value="">全部班級</option></select></label><label>當日時段<select id="time-filter"><option value="">全部時段</option></select></label><button id="show-week">查看每週課表</button></section>
+    <p id="schedule-notice" class="schedule-notice"></p>
+    <section class="stats" aria-label="當日摘要"><article><span>今日應到學生</span><div><strong id="total-count">0</strong><small>位學生</small></div><i>依目前部門、班級與時段</i></article><article><span>已到班課次</span><div><strong id="arrival-count">0</strong><small id="arrival-total">／ 0 筆</small></div><i class="teal">含已離班，各班分別記錄</i></article><article><span>作業已完成</span><div><strong id="homework-count">0</strong><small>筆課次</small></div><i>依每位學生的各堂課記錄</i></article><article><span>評量已完成</span><div><strong id="assessment-count">0</strong><small>筆課次</small></div><i>依每位學生的各堂課記錄</i></article></section>
     <section class="record-panel"><div class="panel-top"><div><h2>學生紀錄 <span id="list-count">0 位</span></h2><p>點選狀態即可切換，變更會自動保存。</p></div><div class="search-wrap"><label for="search" class="sr-only">搜尋學生姓名</label><input id="search" type="search" placeholder="搜尋學生姓名…"></div></div>
-      <div class="toolbar"><div class="filters" aria-label="篩選學生"><button class="active" data-filter="all" aria-pressed="true">全部學生</button><button data-filter="pending" aria-pressed="false">尚未到班</button><button data-filter="unfinished" aria-pressed="false">待完成</button></div><button id="mark-arrived" class="text-button">✓ 全班未到者設為到班</button></div>
-      <div class="table-wrap"><table><thead><tr><th>學生姓名</th><th>到班狀態</th><th>作業進度</th><th>評量進度</th><th>給孩子的小筆記</th></tr></thead><tbody id="student-rows"></tbody></table></div>
+      <div class="toolbar"><div class="filters" aria-label="篩選學生"><button class="active" data-filter="all" aria-pressed="true">全部課次</button><button data-filter="pending" aria-pressed="false">尚未到班</button><button data-filter="unfinished" aria-pressed="false">待完成</button></div><button id="mark-arrived" class="text-button">✓ 目前顯示的未到課次設為到班</button></div>
+      <div class="table-wrap"><table><thead><tr><th>學生／班級時段</th><th>到班狀態</th><th>作業進度</th><th>評量進度</th><th>給孩子的小筆記</th></tr></thead><tbody id="student-rows"></tbody></table></div>
       <div id="empty-state" class="empty" hidden><span>✎</span><h3>準備好記錄今天了嗎？</h3><p>點選「新增學生」建立名單，開始你的班級紀錄。</p></div>
       <div class="panel-footer"><span>小提醒：狀態按鈕可重複點選，循環切換。</span><span id="shown-count">顯示 0 位學生</span></div>
     </section>
     <footer><div><strong>每一天的小日常，都是成長的足跡。</strong><p>資料僅儲存於這台裝置的目前瀏覽器，建議定期下載備份。</p></div><div class="backup-actions"><button id="export-record">匯出當日表格</button><button id="backup">備份全部資料</button><button id="restore">還原備份</button><input id="restore-file" type="file" accept=".json,application/json" hidden></div></footer>
   </main>
-  <dialog id="student-dialog"><form id="student-form"><div class="dialog-heading"><h2 id="dialog-title">新增學生</h2><button type="button" id="close-dialog" aria-label="關閉">×</button></div><p>名單會顯示在新增日期及之後的每日紀錄。</p><label for="student-name">學生姓名</label><input id="student-name" maxlength="30" required placeholder="例如：陳小晴"><label for="student-grade">年級／班別</label><input id="student-grade" maxlength="30" placeholder="例如：三年級・向日葵班"><button type="submit" class="primary">儲存學生</button></form></dialog>
+  <dialog id="student-dialog"><form id="student-form"><div class="dialog-heading"><h2 id="dialog-title">新增學生</h2><button type="button" id="close-dialog" aria-label="關閉">×</button></div><p>學生從所選日期起列入紀錄；已分班者依每週時段顯示。</p><label for="student-name">學生姓名</label><input id="student-name" maxlength="30" required placeholder="例如：陳小晴"><label for="student-grade">年級</label><input id="student-grade" maxlength="30" placeholder="例如：小三、大班"><div id="student-enrollment-field"><label for="student-enrollment">加入班級與時段</label><select id="student-enrollment"><option value="">先不分班</option></select></div><button type="submit" class="primary">儲存學生</button></form></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <div class="dialog-heading"><h2 id="import-title">匯入米豆奶名單</h2><button type="button" id="close-import" aria-label="關閉匯入視窗">×</button></div>
+    <p>已從米豆奶核對 55 位學生（國小 53 位、幼兒園 2 位），包含安親、美語、數學與包套課程，共 26 個班級。車資不單獨算入班。</p>
+    <label for="import-scope">本次匯入範圍</label>
+    <select id="import-scope"><option value="school">符合入班條件（55 位）</option><option value="pending">國小與幼兒園未入上述班級（15 位）</option><option value="excluded">其他年級或未填年級（76 位）</option></select>
+    <p id="import-summary" role="status"></p>
+    <div class="import-preview"><table><thead><tr><th>學生姓名</th><th>原始年級</th><th>核對結果</th></tr></thead><tbody id="import-rows"></tbody></table></div>
+    <p>本次為 2026 年 9 月 20 日的每週排課規則快照，不含假日、停課或臨時調課。首次使用會載入；已有紀錄時可按下方按鈕合併，保留原有紀錄。</p>
+    <button id="confirm-import" class="primary">合併已核對名單與課表</button>
+  </dialog>
+  <dialog id="week-dialog" aria-labelledby="week-title"><div class="dialog-heading"><h2 id="week-title">每週班級課表</h2><button id="close-week" type="button" aria-label="關閉課表">×</button></div><p>依米豆奶每週排課規則，各班及個別學生分別保留時段；不含臨時調課與假日。</p><div id="week-content"></div></dialog>
+  </div>
 </body>
 </html>

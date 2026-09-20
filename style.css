@@ -17,3 +17,30 @@
 @media(max-width:1150px) and (min-width:801px){.school-heading{flex-wrap:wrap;gap:12px 20px}.school-picture{width:180px;height:120px}.school-heading .primary{margin-left:auto}.school-heading h1{font-size:25px}.school-tag{margin-left:0}}
 @media(max-width:800px){.school-heading{display:grid;grid-template-columns:1fr auto;margin:20px 0;padding:18px;gap:14px}.school-picture{grid-column:1 / -1;width:100%;height:155px;max-width:300px;justify-self:center}.heading-copy{align-self:center}.school-heading h1{font-size:23px;letter-spacing:0}.school-heading .eyebrow{font-size:12px;letter-spacing:0}.school-tag{display:none}.school-heading .primary{align-self:center}.school-heading p{font-size:12px}.mobile-break{display:block}}
 @media(max-width:380px){.school-heading{grid-template-columns:1fr}.school-heading .primary{width:100%}.mobile-break{display:none}}
+
+/* 匯入先顯示名單與筆數，讓老師確認範圍後再寫入本機。 */
+.heading-actions{display:flex;flex-direction:column;gap:9px;flex-shrink:0}
+.heading-actions>button{white-space:nowrap;font-size:14px}
+#import-dialog{width:min(630px,calc(100% - 32px));max-height:85vh;overflow:auto}
+#import-scope{width:100%;font:inherit;color:inherit;border:1px solid #d9e3dd;border-radius:8px;padding:11px;background:#fff}
+#import-summary{padding:12px;background:#edf6f2;border-radius:8px;color:#365f4e}
+.import-preview{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.import-preview th{position:sticky;top:0;background:#f4f7f5}
+.import-preview td{padding-block:12px}
+#import-dialog button:disabled{opacity:.5;cursor:default}
+@media(max-width:1150px) and (min-width:801px){.heading-actions{margin-left:auto}}
+@media(max-width:800px){.heading-actions{gap:7px}.heading-actions>button{font-size:12px;padding:10px}.school-heading .heading-actions .primary{width:100%}}
+
+/* 驗證前一律隱藏工作台，避免原有版面樣式蓋過隱藏屬性。 */
+[hidden]{display:none!important}
+.auth-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:#edf5f2}
+.auth-card{width:min(100%,420px);padding:32px;background:white;border:1px solid var(--line);border-radius:20px;box-shadow:0 12px 40px #193b3610}
+.auth-card h1{font-size:28px}.auth-card p{font-size:14px;line-height:1.8;color:#59706e}
+.auth-card label{display:block;margin:18px 0 8px;font-size:14px}
+.auth-card input{width:100%;padding:12px;border:1px solid #d9e3dd;border-radius:8px}
+.auth-card .primary{width:100%;margin-top:24px}
+.auth-card button:disabled{opacity:.55;cursor:wait}
+.auth-card .auth-help{font-size:12px;color:#71817f}
+.auth-account{display:grid;gap:12px;margin-top:24px;font-size:12px;overflow-wrap:anywhere}
+.nav-current{text-decoration:none}
+.local-mode-notice{padding:14px 18px;background:#fff7e6;border:1px solid #f0e5c9;border-radius:10px;color:#806345;font-size:14px;line-height:1.8}
