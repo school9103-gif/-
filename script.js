@@ -74,19 +74,22 @@ async function 準備驗證() {
     return;
   }
   if (免登入模式) {
-    if (!驗證設定.網址 || !驗證設定.公開金鑰) { 登入訊息('尚未連接雲端專案，請先完成專案設定。'); return; }
-    try {
-      if (!驗證服務) {
-        if (!window.supabase) await new Promise((完成, 失敗) => {
-          const 套件=document.createElement('script');套件.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';
-          const 計時=setTimeout(()=>失敗(new Error('載入逾時')),15000);套件.onload=()=>{clearTimeout(計時);完成();};套件.onerror=()=>{clearTimeout(計時);失敗(new Error('無法載入雲端套件'));};document.head.append(套件);
-        });
-        驗證服務=window.supabase.createClient(驗證設定.網址,驗證設定.公開金鑰,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:(網址,選項={})=>fetch(網址,{...選項,signal:AbortSignal.timeout(15000)})}});
-      }
-      if (!工作台)工作台=建立工作台();
-      await 工作台.載入('公開工作台');目前使用者='公開工作台';主動登出=false;
-      取得('auth-screen').hidden=true;取得('protected-app').hidden=false;取得('protected-app').inert=false;取得('auth-account').textContent='網址直入・雲端共享';取得('auth-signout').hidden=true;取得('local-mode-notice').hidden=true;設定路徑('#records');
-    } catch { 鎖定工作台();登入訊息('雲端資料無法載入，請檢查網路或 Supabase 設定。'); }
+    // 先開啟本機工作台，雲端同步在背景進行，避免網路問題阻擋老師使用。
+    try{
+      if(!工作台)工作台=建立工作台();
+      await 工作台.載入('公開工作台',true);目前使用者='公開工作台';主動登出=false;
+      取得('auth-screen').hidden=true;取得('protected-app').hidden=false;取得('protected-app').inert=false;取得('auth-account').textContent='網址直入・正在同步雲端';取得('auth-signout').hidden=true;取得('local-mode-notice').hidden=true;設定路徑('#records');
+      (async()=>{
+        try{
+          if(!驗證設定.網址 || !驗證設定.公開金鑰)return;
+          if(!驗證服務){
+            if(!window.supabase)await new Promise((完成,失敗)=>{const 套件=document.createElement('script');套件.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';const 計時=setTimeout(()=>失敗(new Error('載入逾時')),15000);套件.onload=()=>{clearTimeout(計時);完成();};套件.onerror=()=>{clearTimeout(計時);失敗(new Error('無法載入雲端套件'));};document.head.append(套件);});
+            驗證服務=window.supabase.createClient(驗證設定.網址,驗證設定.公開金鑰,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:(網址,選項={})=>fetch(網址,{...選項,signal:AbortSignal.timeout(15000)})}});
+          }
+          if(!await 工作台.讀取雲端('公開工作台'))throw new Error('雲端資料尚未建立');取得('auth-account').textContent='網址直入・雲端共享';取得('save-state').textContent='雲端資料已同步';
+        }catch{取得('auth-account').textContent='本機開啟・雲端待連線';取得('local-mode-notice').hidden=false;取得('save-state').textContent='本機已保存・雲端待連線';}
+      })();
+    }catch{鎖定工作台();登入訊息('本機工作台無法開啟，請重新整理網頁。');}
     return;
   }
   鎖定工作台();
@@ -168,8 +171,9 @@ window.addEventListener('pageshow', 事件 => { if (事件.persisted) 檢查登�
 
 function 建立工作台() {
 const 取得 = 識別 => document.getElementById(識別);
-const 空資料 = () => ({ version: 1, students: [], days: {}, classes: [], lessonDays: {}, meals: {} });
+const 空資料 = () => ({ version: 1, students: [], days: {}, classes: [], lessonDays: {}, meals: {}, tasks: {} });
 const 狀態選項 = { arrival: ['尚未到班','已到班','已離班','請假'], homework: ['未開始','進行中','已完成','免做'], assessment: ['未開始','進行中','已完成','免做'], exam: ['未開始','已完成'] };
+const 任務科目 = ['國語','數學','自然','社會'];
 const 訂餐紀錄選項 = ['依固定安排','臨時加訂','已用餐','臨時取消'];
 let 資料 = 空資料();
 let 儲存鍵 = '';
@@ -186,18 +190,37 @@ function 通知(文字) { 取得('toast').textContent = 文字; 取得('toast').
 function 元素(標籤, 樣式, 文字) { const 節點 = document.createElement(標籤); if (樣式) 節點.className = 樣式; if (文字 !== undefined) 節點.textContent = 文字; return 節點; }
 function 是物件(值) { return 值 && typeof 值 === 'object' && !Array.isArray(值); }
 function 分數有效(分數) { return 分數 === '' || (typeof 分數 === 'number' && Number.isFinite(分數) && 分數 >= 0 && 分數 <= 100); }
+function 安親作業(課) { return ['安親','包套'].includes(課.department); }
+function 作業完成數(記) { return Array.isArray(記.homeworkItems) ? 記.homeworkItems.filter(Boolean).length : (記.homework === 2 ? 1 : 0); }
+function 作業總數(記) { return Array.isArray(記.homeworkItems) ? 記.homeworkItems.length : 0; }
+function 作業顯示文字(記) {
+  const 總數=作業總數(記);
+  if(總數)return '作業 '+作業完成數(記)+'／'+總數;
+  return 狀態選項.homework[記.homework];
+}
+
 function 紀錄有效(紀錄) {
   // 舊紀錄未含考卷欄位仍可讀取；空白分數與零分分開保存。
   return 是物件(紀錄) && ['arrival','homework','assessment'].every(欄位 => Number.isInteger(紀錄[欄位]) && 紀錄[欄位] >= 0 && 紀錄[欄位] < 4)
     && (紀錄.exam === undefined || (Number.isInteger(紀錄.exam) && 紀錄.exam >= 0 && 紀錄.exam < 2))
-    && (紀錄.score === undefined || 分數有效(紀錄.score)) && typeof 紀錄.note === 'string' && 紀錄.note.length <= 500;
+    && (紀錄.homeworkItems === undefined || (Array.isArray(紀錄.homeworkItems) && 紀錄.homeworkItems.length <= 5 && 紀錄.homeworkItems.every(完成 => typeof 完成 === 'boolean')))
+    && (紀錄.score === undefined || 分數有效(紀錄.score)) && (紀錄.vocabScore === undefined || 分數有效(紀錄.vocabScore)) && (紀錄.teacherComment === undefined || (typeof 紀錄.teacherComment === 'string' && 紀錄.teacherComment.length <= 500)) && typeof 紀錄.note === 'string' && 紀錄.note.length <= 500;
 }
-// 舊的每日紀錄原樣保留，新課次另存，避免跨班互相覆蓋。
+function 任務項目有效(項目){
+  const 已完成=項目.doneTargets===undefined?[]:項目.doneTargets;
+  return 是物件(項目) && typeof 項目.subject==='string' && 任務科目.includes(項目.subject) && typeof 項目.scope==='string' && 項目.scope.length > 0 && 項目.scope.length <= 120 && Array.isArray(項目.targets) && 項目.targets.length > 0 && 項目.targets.length <= 500 && new Set(項目.targets).size===項目.targets.length && 項目.targets.every(鍵=>typeof 鍵==='string' && 鍵.length > 0 && 鍵.length <= 200) && Array.isArray(已完成) && new Set(已完成).size===已完成.length && 已完成.every(鍵=>項目.targets.includes(鍵));
+}
+function 任務格式有效(任務){
+  if(!是物件(任務))return false;
+  if(Array.isArray(任務.items))return 任務.items.length > 0 && 任務.items.length <= 任務科目.length && new Set(任務.items.map(項目=>項目.subject)).size===任務.items.length && 任務.items.every(任務項目有效);
+  // 舊版只有一個範圍，載入後仍可提醒；下次編輯時可改成分科任務。
+  return typeof 任務.scope==='string' && 任務.scope.length > 0 && 任務.scope.length <= 120 && Array.isArray(任務.targets) && 任務.targets.length > 0 && 任務.targets.length <= 500 && new Set(任務.targets).size===任務.targets.length && 任務.targets.every(鍵=>typeof 鍵==='string' && 鍵.length > 0 && 鍵.length <= 200);
+}// 舊的每日紀錄原樣保留，新課次另存，避免跨班互相覆蓋。
 function 資料有效(內容) {
   if (!是物件(內容) || 內容.version !== 1 || !Array.isArray(內容.students) || !是物件(內容.days)) return false;
   const 編號 = new Set();
   for (const 學生 of 內容.students) {
-    if (!學生 || typeof 學生.id !== 'string' || !/^s[\w-]+$/.test(學生.id) || 編號.has(學生.id) || typeof 學生.name !== 'string' || !學生.name.trim() || 學生.name.length > 30 || typeof 學生.grade !== 'string' || 學生.grade.length > 30 || !日期有效(學生.start)) return false;
+    if (!學生 || typeof 學生.id !== 'string' || !/^s[\w-]+$/.test(學生.id) || 編號.has(學生.id) || typeof 學生.name !== 'string' || !學生.name.trim() || 學生.name.length > 30 || typeof 學生.grade !== 'string' || 學生.grade.length > 30 || !日期有效(學生.start) || (學生.end !== undefined && 學生.end !== null && 學生.end !== '' && (!日期有效(學生.end) || 學生.end < 學生.start))) return false;
     if (學生.mealDays !== undefined && (!Array.isArray(學生.mealDays) || !學生.mealDays.every(星期 => Number.isInteger(星期) && 星期 >= 1 && 星期 <= 7) || new Set(學生.mealDays).size !== 學生.mealDays.length)) return false;
     編號.add(學生.id);
   }
@@ -215,6 +238,8 @@ function 資料有效(內容) {
   // 舊備份沒有訂餐欄位時視為空白；訂餐以日期與學生編號驗證。
   const 訂餐們 = 內容.meals === undefined ? {} : 內容.meals;
   if (!是物件(訂餐們) || !Object.entries(訂餐們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([人,值]) => 編號.has(人) && Number.isInteger(值) && 值 >= 0 && 值 < 訂餐紀錄選項.length))) return false;
+  const 任務們 = 內容.tasks === undefined ? {} : 內容.tasks;
+  if(!是物件(任務們) || !Object.entries(任務們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([類型,任務]) => ['assessment','exam'].includes(類型) && 任務格式有效(任務)))) return false;
   const 課次們 = 內容.lessonDays === undefined ? {} : 內容.lessonDays;
   return 是物件(課次們) && Object.entries(課次們).every(([日,列]) => 日期有效(日) && 是物件(列) && Object.entries(列).every(([鍵,紀錄]) => {
     const [人,班,起,迄,...其餘] = 鍵.split('|');
@@ -233,7 +258,7 @@ function 排入雲端保存(){
   });
 }
 function 保存() { try { if (!允許儲存 || !儲存鍵) throw new Error('未開放儲存'); localStorage.setItem(儲存鍵,JSON.stringify(資料)); 取得('save-state').textContent = 雲端使用者 ? '正在同步雲端…' : '所有變更已保存'; if(雲端使用者)排入雲端保存(); return true; } catch { 取得('save-state').textContent = '尚未保存，請下載備份'; 通知('目前無法保存，請先下載全部資料備份。'); return false; } }
-function 預設紀錄() { return {arrival:0,homework:0,assessment:0,exam:0,score:'',note:''}; }
+function 預設紀錄() { return {arrival:0,homework:0,assessment:0,exam:0,score:'',vocabScore:'',teacherComment:'',note:''}; }
 function 讀取紀錄(課) { const 日 = 取得('record-date').value; return {...預設紀錄(),...(課.legacy ? 資料.days[日]?.[課.student.id] : 資料.lessonDays[日]?.[課.key])}; }
 function 修改紀錄(課,欄,值) { const 日 = 取得('record-date').value; const 容器 = 課.legacy ? 資料.days : 資料.lessonDays; 容器[日] ||= {}; 容器[日][課.legacy ? 課.student.id : 課.key] = {...讀取紀錄(課),[欄]:值}; }
 // 固定星期是學生設定；當天紀錄只保存臨時加訂、已用餐或臨時取消。
@@ -257,12 +282,15 @@ function 設定訂餐(編號,值) {
 function 訂餐選單內容(編號){
   return 固定訂餐(編號)?[['預設','固定訂餐'],['2','已用餐'],['3','臨時取消']]:[['預設','未訂餐'],['1','臨時加訂'],['2','已用餐']];
 }
+// 美語課程不供餐；包套仍依安親規則提供用餐記錄。
+function 可訂餐課次(課){return 課.department!=='美語';}
 function 班級名稱(班) { const 同名 = 資料.classes.filter(項 => 項.name === 班.name); return 班.name + (同名.length > 1 ? '（' + (同名.findIndex(項 => 項.id === 班.id)+1) + '）' : ''); }
 function 每週文字(時段) { return 時段.map(時 => '週' + '一二三四五六日'[時.day-1] + ' ' + 時.start + '–' + 時.end).join('、'); }
 function 當日課次() {
   const 日 = 取得('record-date').value;
   const 星期 = new Date(日 + 'T12:00:00').getDay() || 7;
-  const 學生表 = new Map(資料.students.filter(人 => 人.start <= 日).map(人 => [人.id,人]));
+  const 當日課次鍵=Object.keys(資料.lessonDays[日] || {});
+  const 學生表 = new Map(資料.students.filter(人 => (人.start <= 日 && (!日期有效(人.end) || 日 <= 人.end)) || Boolean(資料.days[日]?.[人.id]) || 當日課次鍵.some(鍵=>鍵.startsWith(人.id+'|'))).map(人 => [人.id,人]));
   const 結果 = new Map();
   const 已分班 = new Set();
   for (const 班 of 資料.classes) for (const 組 of 班.groups) for (const 編號 of 組.studentIds) {
@@ -282,7 +310,9 @@ function 當日課次() {
     const [編號,班號,開始,結束]=鍵.split('|');const 學生=學生表.get(編號);const 班=資料.classes.find(項=>項.id===班號);
     if(學生 && 班)結果.set(鍵,{key:鍵,student:學生,classId:班.id,department:班.department,className:班級名稱(班)+'（原時段紀錄）',start:開始,end:結束,legacy:false});
   }
-  return [...結果.values()].sort((甲,乙) => 甲.start.localeCompare(乙.start) || 甲.className.localeCompare(乙.className,'zh-Hant') || 甲.student.name.localeCompare(乙.student.name,'zh-Hant'));
+  // 預設先依部門與班級排列，讓同一個美語班的學生連續顯示，再看上課時段與姓名。
+  const 部門順序={安親:1,美語:2,數學:3,包套:4,'未分班／舊紀錄':9};
+  return [...結果.values()].sort((甲,乙) => (部門順序[甲.department]||8)-(部門順序[乙.department]||8) || 甲.className.localeCompare(乙.className,'zh-Hant') || 甲.start.localeCompare(乙.start) || 甲.student.name.localeCompare(乙.student.name,'zh-Hant'));
 }
 function 設定選單(識別,選項,標籤) { const 下拉 = 取得(識別); const 原值 = 下拉.value; 下拉.replaceChildren(); 下拉.append(new Option(標籤,'')); 選項.forEach(([值,名稱]) => 下拉.append(new Option(名稱,值))); 下拉.value = 選項.some(項 => 項[0] === 原值) ? 原值 : ''; }
 // 空值代表全選，空集合代表全部取消。
@@ -310,6 +340,7 @@ function 排序值(課){
   if(排序欄位==='class')return 課.className;
   if(排序欄位==='time')return 課.start ? 課.start+'–'+課.end : '';
   if(排序欄位==='meal')return 讀取訂餐(課.student.id).code;
+  if(排序欄位==='homework'){const 記=讀取紀錄(課);return 作業總數(記)?作業完成數(記)/作業總數(記):記.homework;}
   return 讀取紀錄(課)[排序欄位];
 }
 function 排序課次(課次){
@@ -348,7 +379,7 @@ function 顯示名單(焦點) {
   取得('arrival-total').textContent = '／ '+全部.length+' 筆';
   取得('homework-count').textContent = 全部.filter(課=>讀取紀錄(課).homework===2).length;
   取得('assessment-count').textContent = 全部.filter(課=>讀取紀錄(課).assessment===2).length;
-  const 當日編號 = [...new Set(全部.map(課=>課.student.id))];
+  const 當日編號 = [...new Set(全部.filter(可訂餐課次).map(課=>課.student.id))];
   取得('meal-ordered-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號).ordered).length;
   取得('meal-waiting-count').textContent = 當日編號.filter(編號=>{const 狀態=讀取訂餐(編號);return 狀態.ordered && !狀態.eaten;}).length;
   取得('meal-eaten-count').textContent = 當日編號.filter(編號=>讀取訂餐(編號).eaten).length;
@@ -367,32 +398,54 @@ function 顯示名單(焦點) {
     if(課.legacy){const 設定=元素('button','text-button','編輯名單／分班');設定.type='button';設定.addEventListener('click',()=>開啟學生(課.student));姓名區.append(設定);}
     姓名格.append(姓名區,元素('div','lesson-class',課.department+'・'+課.className),元素('div','lesson-time',課.start ? 課.start+'–'+課.end : '未分時段')); 列.append(姓名格);
     for (const 欄 of Object.keys(狀態選項)) {
-      const 值 = 記[欄]; const 樣式 = 欄==='exam' ? (值===1?'good':'') : 值===3 ? 'leave' : 欄==='arrival' ? (值>0?'good':'') : 值===2?'good':值===1?'working':'';
+      const 值 = 記[欄];
+      // 安親班的作業可拆成多項逐一勾選；美語班仍使用原本的狀態按鈕。
+      if(欄==='homework' && 安親作業(課)){
+        const 完成數=作業完成數(記),總數=作業總數(記);
+        const 樣式=總數 && 完成數===總數?'good':完成數?'working':'';
+        const 按鈕=元素('button','status '+樣式,總數?作業顯示文字(記):'設定作業');
+        按鈕.id=課.key+'-homework';
+        按鈕.setAttribute('aria-label',課.student.name+'，'+課.className+'的安親作業：'+(總數?作業顯示文字(記):'尚未設定作業項數'));
+        按鈕.title='設定今天有幾項安親作業，或逐項勾選完成';
+        按鈕.addEventListener('click',()=>開啟作業(課));
+        const 格=元素('td');格.append(按鈕);列.append(格);continue;
+      }
+      const 樣式 = 欄==='exam' ? (值===1?'good':'') : 值===3 ? 'leave' : 欄==='arrival' ? (值>0?'good':'') : 值===2?'good':值===1?'working':'';
       const 按鈕 = 元素('button','status '+樣式,狀態選項[欄][值]); 按鈕.id=課.key+'-'+欄;
       const 欄名 = {arrival:'到班',homework:'作業',assessment:'評量',exam:'考卷進度'}[欄];
       按鈕.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'，'+欄名+'：'+狀態選項[欄][值]+'；點選改為'+狀態選項[欄][(值+1)%狀態選項[欄].length]);
       按鈕.addEventListener('click',()=>{修改紀錄(課,欄,(值+1)%狀態選項[欄].length);保存();顯示名單(按鈕.id);});
       const 格=元素('td');格.append(按鈕);列.append(格);
     }
-    const 分數格 = 元素('td'); const 分數欄 = 元素('input','exam-score');
-    分數欄.id=課.key+'-score';分數欄.type='number';分數欄.min='0';分數欄.max='100';分數欄.step='any';分數欄.inputMode='decimal';分數欄.value=記.score;分數欄.placeholder='未登記';
-    分數欄.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的考卷分數，零至一百分');
-    分數欄.title='0～100 分，可填小數；留白表示尚未登記';
-    分數欄.addEventListener('change',()=>{
-      const 分數=分數欄.value===''?'':Number(分數欄.value);
-      if(分數欄.validity.badInput || !分數有效(分數)){分數欄.value=讀取紀錄(課).score;通知('分數未保存，請輸入 0～100 分；留白表示未登記。');return;}
-      修改紀錄(課,'score',分數);保存();if(排序欄位==='score')顯示名單(分數欄.id);
-    });
-    分數格.append(分數欄);列.append(分數格);
-    const 訂餐狀態=讀取訂餐(課.student.id);const 訂餐紀錄=讀取訂餐紀錄(課.student.id);
-    const 訂餐選單=元素('select','meal-select '+(訂餐狀態.eaten?'good':訂餐狀態.ordered?'working':訂餐紀錄===3?'cancelled':''));訂餐選單.id=課.key+'-meal';
-    訂餐選單內容(課.student.id).forEach(([值,名稱])=>訂餐選單.append(new Option(名稱,值)));
-    訂餐選單.value=訂餐紀錄===0 || (訂餐紀錄===1 && 固定訂餐(課.student.id))?'預設':String(訂餐紀錄);
-    訂餐選單.setAttribute('aria-label',課.student.name+'當天訂餐：'+訂餐狀態.label);
-    訂餐選單.title='同一學生當天跨班共用；固定安排可在學生資料中修改';
-    訂餐選單.addEventListener('change',()=>{設定訂餐(課.student.id,訂餐選單.value);保存();顯示名單(訂餐選單.id);});
-    const 訂餐格=元素('td');訂餐格.append(訂餐選單);列.append(訂餐格);
-    const 格=元素('td');const 備註=元素('input','note');備註.value=記.note;備註.maxLength=500;備註.placeholder='記下這堂課的提醒…';備註.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的備註');備註.addEventListener('input',()=>{修改紀錄(課,'note',備註.value);保存();});格.append(備註);列.append(格);
+    const 分數格=元素('td');
+    const 建立分數欄=(欄位,標籤,值)=>{
+      const 包裝=元素('label','score-entry');包裝.append(document.createTextNode(標籤));
+      const 輸入=元素('input','exam-score');輸入.id=課.key+'-'+欄位;輸入.type='number';輸入.min='0';輸入.max='100';輸入.step='any';輸入.inputMode='decimal';輸入.value=值;輸入.placeholder='未登記';
+      輸入.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的'+標籤+'分數，零至一百分');輸入.title='0～100 分，可填小數；留白表示未登記';
+      輸入.addEventListener('change',()=>{
+        const 分數=輸入.value===''?'':Number(輸入.value);
+        if(輸入.validity.badInput || !分數有效(分數)){輸入.value=讀取紀錄(課)[欄位];通知(標籤+'分數未保存，請輸入 0～100 分；留白表示未登記。');return;}
+        修改紀錄(課,欄位,分數);保存();if(排序欄位==='score' && 欄位==='score')顯示名單(輸入.id);
+      });包裝.append(輸入);return 包裝;
+    };
+    if(['美語','包套'].includes(課.department)){
+      const 分數區=元素('div','score-stack');分數區.append(建立分數欄('vocabScore','單字',記.vocabScore),建立分數欄('score','考卷',記.score));分數格.append(分數區);
+    }else 分數格.append(建立分數欄('score','考卷',記.score));
+    列.append(分數格);
+    const 訂餐格=元素('td');
+    if(可訂餐課次(課)){
+      const 訂餐狀態=讀取訂餐(課.student.id);const 訂餐紀錄=讀取訂餐紀錄(課.student.id);
+      const 訂餐選單=元素('select','meal-select '+(訂餐狀態.eaten?'good':訂餐狀態.ordered?'working':訂餐紀錄===3?'cancelled':''));訂餐選單.id=課.key+'-meal';
+      訂餐選單內容(課.student.id).forEach(([值,名稱])=>訂餐選單.append(new Option(名稱,值)));
+      訂餐選單.value=訂餐紀錄===0 || (訂餐紀錄===1 && 固定訂餐(課.student.id))?'預設':String(訂餐紀錄);
+      訂餐選單.setAttribute('aria-label',課.student.name+'當天訂餐：'+訂餐狀態.label);
+      訂餐選單.title='同一學生當天跨班共用；固定安排可在學生資料中修改';
+      訂餐選單.addEventListener('change',()=>{設定訂餐(課.student.id,訂餐選單.value);保存();顯示名單(訂餐選單.id);});
+      訂餐格.append(訂餐選單);
+    }else 訂餐格.append(元素('span','meal-unavailable','不供餐'));
+    列.append(訂餐格);
+    const 格=元素('td');const 美語課次=['美語','包套'].includes(課.department);const 備註=元素('input','note');
+    備註.value=美語課次?(記.teacherComment || 記.note):記.note;備註.maxLength=500;備註.placeholder=美語課次?'老師評語…':'記下這堂課的提醒…';備註.setAttribute('aria-label',課.student.name+'，'+課.className+'，'+課.start+'的'+(美語課次?'老師評語':'備註'));備註.addEventListener('input',()=>{修改紀錄(課,美語課次?'teacherComment':'note',備註.value);保存();});格.append(備註);列.append(格);
     // 請假時保留備註供填寫原因，其餘後續欄位鎖定，原有紀錄不變。
     if(記.arrival===3){
       列.classList.add('leave-row');
@@ -404,26 +457,147 @@ function 顯示名單(焦點) {
     }
     容器.append(列);
   }
+  顯示任務提醒();
   if (焦點) 取得(焦點)?.focus();
 }
+function 任務欄位(類型){return 類型==='exam'?'exam':'assessment';}
+function 讀取日期紀錄(日,鍵){
+  const 編號=String(鍵).split('|')[0];
+  const 原紀錄=String(鍵).includes('|') ? 資料.lessonDays[日]?.[鍵] : 資料.days[日]?.[編號];
+  return {...預設紀錄(),...原紀錄};
+}
+function 取得任務(日,類型){return 資料.tasks?.[日]?.[類型];}
+function 任務項目(日,類型){
+  const 任務=取得任務(日,類型);if(!任務)return [];
+  if(Array.isArray(任務.items))return 任務.items;
+  return [{subject:'未分類',scope:任務.scope||'',targets:任務.targets||[],doneTargets:任務.doneTargets||[]}];
+}
+function 任務項目未完成(日,類型,項目){
+  const 欄位=任務欄位(類型),完成值=類型==='exam'?1:2,已完成=new Set(項目.doneTargets||[]);
+  return 項目.targets.filter(鍵=>!已完成.has(鍵)&&讀取日期紀錄(日,鍵)[欄位]!==完成值);
+}
+function 安親任務課次(){return 當日課次().filter(課=>['安親','包套'].includes(課.department)&&!課.legacy);}
+function 顯示任務科目(){
+  const 日=取得('record-date').value,類型=取得('task-type').value,容器=取得('task-subjects');容器.replaceChildren();
+  const 既有=new Map(任務項目(日,類型).map(項目=>[項目.subject,項目]));
+  for(const 科目 of 任務科目){
+    const 既有項目=既有.get(科目),列=元素('div','task-subject-row');
+    const 標籤=元素('label');const 勾選=document.createElement('input');勾選.type='checkbox';勾選.className='task-subject-toggle';勾選.value=科目;勾選.checked=Boolean(既有項目);
+    標籤.append(勾選,document.createTextNode(科目));
+    const 範圍=document.createElement('input');範圍.type='text';範圍.className='task-subject-scope';範圍.dataset.subject=科目;範圍.maxLength=120;範圍.placeholder='填寫範圍';範圍.value=既有項目?.scope||'';範圍.disabled=!勾選.checked;
+    勾選.addEventListener('change',()=>{範圍.disabled=!勾選.checked;if(勾選.checked)範圍.focus();});列.append標籤,範圍;容器.append(列);
+  }
+}
+function 顯示任務對象(){
+  const 日=取得('record-date').value,類型=取得('task-type').value,容器=取得('task-targets');
+  const 已選=new Set(任務項目(日,類型).flatMap(項目=>項目.targets||[]));容器.replaceChildren();
+  const 課次們=安親任務課次();
+  if(!課次們.length){容器.append(元素('p','','今天沒有安親或包套班課次可供批量設定。'));return;}
+  for(const 課 of 課次們){
+    const 標籤=元素('label','task-target');const 勾選=document.createElement('input');勾選.type='checkbox';勾選.value=課.key;勾選.checked=已選.has(課.key);
+    標籤.append(勾選,document.createTextNode(課.student.name+'・'+課.className+'・'+課.start+'–'+課.end));容器.append(標籤);
+  }
+}
+function 開啟任務設定(){顯示任務科目();顯示任務對象();取得('task-dialog').showModal();}
+function 標記任務項目完成(日,類型,科目,完成){
+  const 任務=取得任務(日,類型);const 項目=任務項目(日,類型).find(項=>項.subject===科目);if(!任務||!項目)return;
+  項目.doneTargets=完成?[...項目.targets]:[];保存();顯示名單();
+}
+function 顯示任務提醒(){
+  const 容器=取得('task-reminder');if(!容器)return;容器.replaceChildren();
+  const 今天=取得('record-date').value,提醒=[];
+  for(const 日 of Object.keys(資料.tasks||{}).sort()){
+    if(日>今天)continue;
+    for(const 類型 of ['assessment','exam'])for(const 項目 of 任務項目(日,類型)){
+      const 未完成=任務項目未完成(日,類型,項目);if(!未完成.length)continue;
+      提醒.push({日,類型,項目,數量:未完成.length});
+    }
+  }
+  if(!提醒.length){容器.hidden=true;return;}
+  容器.hidden=false;容器.append(元素('strong','',提醒.some(項=>項.日<今天)?'有待追蹤任務':'今日任務'));
+  const 全部完成=元素('button','', '全部完成');全部完成.type='button';全部完成.addEventListener('click',()=>{
+    for(const 項 of 提醒){const 任務=取得任務(項.日,項.類型);const 目標=任務項目(項.日,項.類型).find(項目=>項目.subject===項.項目.subject);if(目標)目標.doneTargets=[...目標.targets];}
+    保存();顯示名單();通知('已將目前列出的評量與考卷任務全部標記完成。');
+  });容器.append(全部完成);
+  for(const 項 of 提醒){
+    const 列=元素('div','task-reminder-row');const 前綴=項.日<今天?'逾期':'今天';const 類型名稱=項.類型==='exam'?'考卷':'評量';
+    const 勾選=document.createElement('input');勾選.type='checkbox';勾選.className='task-reminder-check';勾選.setAttribute('aria-label',前綴+' '+類型名稱+' '+項.項目.subject+'完成');勾選.addEventListener('change',()=>標記任務項目完成(項.日,項.類型,項.項目.subject,勾選.checked));
+    列.append(勾選,元素('span','',前綴+' '+類型名稱+'・'+項.項目.subject+'：'+項.項目.scope+'，尚有 '+項.數量+' 位未完成（設定日 '+項.日+'）'));
+    const 按鈕=元素('button','',項.日<今天?'回到設定日查看':'開啟任務設定');按鈕.type='button';按鈕.addEventListener('click',()=>{if(項.日<今天){取得('record-date').value=項.日;取得('time-filter').value='';顯示名單();}else 開啟任務設定();});列.append(按鈕);容器.append(列);
+  }
+}
+取得('show-task-dialog').addEventListener('click',()=>開啟任務設定());
+取得('close-task').addEventListener('click',()=>取得('task-dialog').close());
+取得('task-type').addEventListener('change',()=>{顯示任務科目();顯示任務對象();});
+取得('task-select-all').addEventListener('click',()=>{const 勾選=[...取得('task-targets').querySelectorAll('input[type="checkbox"]')];const 全選=勾選.length>0&&勾選.every(項=>項.checked);勾選.forEach(項=>項.checked=!全選);});
+取得('task-form').addEventListener('submit',事件=>{
+  事件.preventDefault();const 日=取得('record-date').value,類型=取得('task-type').value,科目列=[...取得('task-subjects').querySelectorAll('.task-subject-toggle:checked')];
+  const 對象=[...取得('task-targets').querySelectorAll('input[type="checkbox"]:checked')].map(項=>項.value),舊項目=任務項目(日,類型);
+  if(!科目列.length){通知('請至少選擇一個科目。');return;}
+  if(!對象.length){通知('請至少選擇一位安親或包套班學生。');return;}
+  const 項目們=[];
+  for(const 勾選 of 科目列){const 科目=勾選.value,範圍=取得('task-subjects').querySelector('.task-subject-scope[data-subject="'+科目+'"]')?.value.trim()||'';if(!範圍){通知('請填寫'+科目+'的完成範圍。');return;}const 舊=舊項目.find(項目=>項目.subject===科目);項目們.push({subject:科目,scope:範圍,targets:對象,doneTargets:(舊?.doneTargets||[]).filter(鍵=>對象.includes(鍵))});}
+  資料.tasks ||= {};資料.tasks[日] ||= {};資料.tasks[日][類型]={items:項目們};保存();取得('task-dialog').close();顯示名單();通知('已批量設定 '+(類型==='exam'?'考卷':'評量')+'的分科任務，未完成時會逐科提醒。');
+});let 作業課次=null;
+function 建立作業勾選項目(數量,已完成=[]){
+  const 容器=取得('homework-items');容器.replaceChildren();
+  for(let 索引=0;索引<數量;索引++){
+    const 標籤=元素('label','homework-item');
+    const 勾選=document.createElement('input');勾選.type='checkbox';勾選.className='homework-item-check';勾選.checked=Boolean(已完成[索引]);
+    標籤.append(勾選,document.createTextNode('第 '+(索引+1)+' 項作業'));容器.append(標籤);
+  }
+}
+function 取得作業數量(){
+  const 數量=Number(取得('homework-item-count').value);
+  if(!Number.isInteger(數量)||數量<0||數量>5){通知('安親作業項數請填 0～5 的整數。');return null;}
+  return 數量;
+}
+function 開啟作業(課){
+  作業課次=課;const 記=讀取紀錄(課);const 舊項目=Array.isArray(記.homeworkItems)?記.homeworkItems:[];
+  const 數量=舊項目.length || (記.homework>0?1:0);
+  取得('homework-student-label').textContent=課.student.name+'・'+課.className+'（安親班）';
+  取得('homework-item-count').value=數量;
+  建立作業勾選項目(數量,舊項目.length?舊項目:[記.homework===2]);
+  取得('homework-dialog').showModal();
+}
+取得('build-homework-items').addEventListener('click',()=>{
+  const 數量=取得作業數量();if(數量===null)return;
+  const 舊項目=[...取得('homework-items').querySelectorAll('.homework-item-check')].map(項=>項.checked);
+  建立作業勾選項目(數量,舊項目);
+});
+取得('homework-all').addEventListener('click',()=>取得('homework-items').querySelectorAll('.homework-item-check').forEach(項=>項.checked=true));
+取得('close-homework').addEventListener('click',()=>取得('homework-dialog').close());
+取得('homework-form').addEventListener('submit',事件=>{
+  事件.preventDefault();if(!作業課次)return;
+  const 數量=取得作業數量();if(數量===null)return;
+  const 完成=[...取得('homework-items').querySelectorAll('.homework-item-check')].slice(0,數量).map(項=>項.checked);
+  while(完成.length<數量)完成.push(false);
+  const 狀態=數量===0?0:完成.every(Boolean)?2:1;
+  修改紀錄(作業課次,'homeworkItems',完成);修改紀錄(作業課次,'homework',狀態);
+  保存();顯示名單(作業課次.key+'-homework');取得('homework-dialog').close();作業課次=null;
+});
 // 名單管理直接使用所有已匯入學生，不依當日排課篩選。
 function 顯示學生總名單(){
-  const 搜尋=取得('roster-search').value.trim();const 僅未分班=取得('roster-unassigned').checked;
+  const 搜尋=取得('roster-search').value.trim();const 僅未分班=取得('roster-unassigned').checked;const 只在籍=取得('roster-active').checked;
   const 容器=取得('roster-list');容器.replaceChildren();let 筆數=0;
   for(const 學生 of [...資料.students].sort((甲,乙)=>甲.name.localeCompare(乙.name,'zh-Hant'))){
     const 班級=資料.classes.filter(班=>班.groups.some(組=>組.studentIds.includes(學生.id)));
-    if((搜尋 && !學生.name.includes(搜尋)) || (僅未分班 && 班級.length))continue;
+    const 已離班=Boolean(日期有效(學生.end) && 學生.end < 今日());
+    if((搜尋 && !學生.name.includes(搜尋)) || (僅未分班 && 班級.length) || (只在籍 && 已離班))continue;
     const 按鈕=元素('button','roster-student');按鈕.type='button';
-    按鈕.append(元素('strong','',學生.name+'・'+(學生.grade || '未填年級')),元素('span','',班級.length?班級.map(班級名稱).join('、'):'尚未分班・點選設定班級'));
+    if(已離班)按鈕.classList.add('inactive');
+    const 狀態文字=已離班?'已離班・最後到班 '+學生.end:'';
+    按鈕.append(元素('strong','',學生.name+'・'+(學生.grade || '未填年級')),元素('span','',狀態文字 || (班級.length?班級.map(班級名稱).join('、'):'尚未分班・點選設定班級')));
     按鈕.addEventListener('click',()=>開啟學生(學生));容器.append(按鈕);筆數++;
   }
   取得('roster-count').textContent='顯示 '+筆數+' 位學生';
   if(!筆數)容器.append(元素('p','','沒有符合條件的學生。請調整搜尋或取消未分班篩選；尚未匯入者需先匯入名單。'));
 }
-取得('show-roster').addEventListener('click',()=>{取得('roster-search').value='';取得('roster-unassigned').checked=false;顯示學生總名單();取得('roster-dialog').showModal();取得('roster-search').focus();});
+取得('show-roster').addEventListener('click',()=>{取得('roster-search').value='';取得('roster-unassigned').checked=false;取得('roster-active').checked=true;顯示學生總名單();取得('roster-dialog').showModal();取得('roster-search').focus();});
 取得('close-roster').addEventListener('click',()=>取得('roster-dialog').close());
 取得('roster-search').addEventListener('input',顯示學生總名單);
 取得('roster-unassigned').addEventListener('change',顯示學生總名單);
+取得('roster-active').addEventListener('change',顯示學生總名單);
 let 修改班級模式=false;
 function 顯示班級名稱設定(){
   const 班=資料.classes.find(項=>項.id===取得('class-choice').value);
@@ -491,7 +665,7 @@ function 合併學生時段(學生){
   return [...合併.values()];
 }
 function 開啟學生(學生) {
-  編輯編號=學生?.id || null;取得('dialog-title').textContent=學生?'編輯學生資料與課表':'新增學生';取得('student-name').value=學生?.name || '';取得('student-grade').value=學生?.grade || '';
+  編輯編號=學生?.id || null;取得('dialog-title').textContent=學生?'編輯學生資料與課表':'新增學生';取得('student-name').value=學生?.name || '';取得('student-grade').value=學生?.grade || '';取得('student-end').value=學生?.end || '';
   const 固定星期=new Set(學生?.mealDays || []);
   取得('student-meal-days').querySelectorAll('.student-meal-day').forEach(勾選=>勾選.checked=固定星期.has(Number(勾選.value)));
   取得('student-schedules').replaceChildren();
@@ -502,8 +676,12 @@ function 開啟學生(學生) {
 }
 取得('add-student').addEventListener('click',()=>開啟學生());
 取得('close-dialog').addEventListener('click',()=>取得('student-dialog').close());
+取得('leave-student').addEventListener('click',()=>{if(!編輯編號){通知('請先儲存學生資料，再設定離班。');return;}const 日=new Date();日.setDate(日.getDate()-1);取得('student-end').value=日.getFullYear()+'-'+String(日.getMonth()+1).padStart(2,'0')+'-'+String(日.getDate()).padStart(2,'0');通知('已設定為今天起停止點名，請按儲存學生套用。');});
+取得('clear-student-end').addEventListener('click',()=>{取得('student-end').value='';通知('已恢復在籍，請按儲存學生套用。');});
 取得('student-form').addEventListener('submit',事件=>{
   事件.preventDefault();const 姓名=取得('student-name').value.trim();if(!姓名)return;
+  const 最後到班日=取得('student-end').value;
+  if(最後到班日 && (!日期有效(最後到班日) || 最後到班日 < 取得('record-date').value)){通知('最後到班日期不可早於學生開始日期。');return;}
   const 課表=[];
   for(const 列 of 取得('student-schedules').children){
     const 班號=列.querySelector('.schedule-class').value;
@@ -519,8 +697,8 @@ function 開啟學生(學生) {
   }
   const 編號=編輯編號 || 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
   const 固定用餐星期=[...取得('student-meal-days').querySelectorAll('.student-meal-day:checked')].map(項=>Number(項.value));
-  if(編輯編號)Object.assign(資料.students.find(人=>人.id===編號),{name:姓名,grade:取得('student-grade').value.trim(),mealDays:固定用餐星期});
-  else 資料.students.push({id:編號,name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value,mealDays:固定用餐星期});
+  if(編輯編號)Object.assign(資料.students.find(人=>人.id===編號),{name:姓名,grade:取得('student-grade').value.trim(),end:最後到班日,mealDays:固定用餐星期});
+  else 資料.students.push({id:編號,name:姓名,grade:取得('student-grade').value.trim(),start:取得('record-date').value,end:最後到班日,mealDays:固定用餐星期});
   // 只更換這名學生的週課表，同班其他學生仍保留原來的排課。
   for(const 班 of 資料.classes){
     for(const 組 of 班.groups)組.studentIds=組.studentIds.filter(人=>人!==編號);
@@ -540,18 +718,22 @@ function 部門變更(){取得('class-filter').value='';取得('time-filter').va
 取得('department-all').addEventListener('click',()=>{已選部門=null;部門變更();});
 取得('department-none').addEventListener('click',()=>{已選部門=new Set();部門變更();});
 for(const 識別 of ['class-filter','time-filter'])取得(識別).addEventListener('change',()=>{if(識別==='class-filter')取得('time-filter').value='';顯示名單();});
+取得('class-order').addEventListener('click',()=>{排序欄位='class';排序方向=1;顯示名單();});
 document.querySelectorAll('[data-filter]').forEach(按鈕=>按鈕.addEventListener('click',()=>{篩選=按鈕.dataset.filter;document.querySelectorAll('[data-filter]').forEach(項=>{項.classList.toggle('active',項===按鈕);項.setAttribute('aria-pressed',String(項===按鈕));});顯示名單();}));
 取得('mark-arrived').addEventListener('click',()=>{const 待到=顯示課次().filter(課=>讀取紀錄(課).arrival===0);if(!待到.length){通知('目前沒有尚未到班的課次');return;}if(!confirm('將目前顯示的 '+待到.length+' 筆未到課次標記為已到班？'))return;待到.forEach(課=>修改紀錄(課,'arrival',1));保存();顯示名單();});
 function 下載(內容,檔名,類型){const 網址=URL.createObjectURL(new Blob([內容],{type:類型}));const 連結=元素('a');連結.href=網址;連結.download=檔名;連結.click();setTimeout(()=>URL.revokeObjectURL(網址),1000);}
 function 表格文字(文字){let 值=String(文字);if(/^\s*[=+@-]/.test(值))值="'"+值;return '"'+值.replaceAll('"','""')+'"';}
 取得('backup').addEventListener('click',()=>下載(JSON.stringify(資料,null,2),'小日常完整備份-'+今日()+'.json','application/json'));
-取得('export-record').addEventListener('click',()=>{const 列=[['日期','姓名','年級','部門','班級','開始','結束','到班','作業','評量','考卷進度','考卷分數','當天訂餐（同生跨班共用）','備註']];範圍課次().forEach(課=>{const 記=讀取紀錄(課);列.push([取得('record-date').value,課.student.name,課.student.grade,課.department,課.className,課.start,課.end,狀態選項.arrival[記.arrival],狀態選項.homework[記.homework],狀態選項.assessment[記.assessment],狀態選項.exam[記.exam],記.score,讀取訂餐(課.student.id).label,記.note]);});下載('\uFEFF'+列.map(項=>項.map(表格文字).join(',')).join('\r\n'),'班級紀錄-'+取得('record-date').value+'.csv','text/csv;charset=utf-8');});
-取得('restore').addEventListener('click',()=>取得('restore-file').click());
+取得('export-record').addEventListener('click',()=>{
+  const 列=[['日期','姓名','年級','部門','班級','開始','結束','到班','作業','評量','考卷進度','單字分數','考卷分數','老師評語','當天訂餐（同生跨班共用）','備註']];
+  範圍課次().forEach(課=>{const 記=讀取紀錄(課);const 英語課次=['美語','包套'].includes(課.department);列.push([取得('record-date').value,課.student.name,課.student.grade,課.department,課.className,課.start,課.end,狀態選項.arrival[記.arrival],作業顯示文字(記),狀態選項.assessment[記.assessment],狀態選項.exam[記.exam],英語課次?記.vocabScore:'',記.score,英語課次?(記.teacherComment||記.note):'',可訂餐課次(課)?讀取訂餐(課.student.id).label:'不供餐',記.note]);});
+  下載('\uFEFF'+列.map(項=>項.map(表格文字).join(',')).join('\r\n'),'班級紀錄-'+取得('record-date').value+'.csv','text/csv;charset=utf-8');
+});取得('restore').addEventListener('click',()=>取得('restore-file').click());
 取得('restore-file').addEventListener('change',async 事件=>{
   const 檔=事件.target.files[0];if(!檔)return;
   try{if(檔.size>10000000)throw new Error('檔案過大');const 新=JSON.parse(await 檔.text());if(!資料有效(新))throw new Error('格式不符');
     if(!confirm('還原會以備份取代目前資料，請先備份。確定還原？'))return;
-    新.classes ||= [];新.lessonDays ||= {};新.meals ||= {};
+    新.classes ||= [];新.lessonDays ||= {};新.meals ||= {};新.tasks ||= {};
     localStorage.setItem(儲存鍵,JSON.stringify(新));資料=新;允許儲存=true;取得('save-state').textContent='備份已還原';顯示名單();通知('備份已還原，原版與班級課次紀錄皆可讀取。');
   }catch{通知('未還原：備份格式不正確、檔案過大，或無法保存。');}finally{事件.target.value='';}
 });
@@ -2259,20 +2441,20 @@ function 清空(){
   document.querySelectorAll('[data-filter]').forEach(項=>{項.classList.toggle('active',項.dataset.filter==='all');項.setAttribute('aria-pressed',String(項.dataset.filter==='all'));});
   取得('import-rows').replaceChildren();取得('week-content').replaceChildren();取得('toast').hidden=true;clearTimeout(通知計時);顯示名單();
 }
-async function 載入(使用者編號){
-  清空();儲存鍵=本機模式?'小日常班級紀錄第一版':'小日常班級紀錄第一版:'+使用者編號;允許儲存=true;雲端使用者=本機模式?'':使用者編號;
+async function 載入(使用者編號,只本機=false){
+  清空();儲存鍵=本機模式?'小日常班級紀錄第一版':'小日常班級紀錄第一版:'+使用者編號;允許儲存=true;雲端使用者=(本機模式||只本機)?'':使用者編號;
   取得('save-state').textContent=本機模式?'本機紀錄自動保存':'正在讀取雲端資料…';
   try{
-    if(本機模式){
+    if(本機模式||只本機){
       const 原=localStorage.getItem(儲存鍵);
-      if(原){const 內容=JSON.parse(原);if(!資料有效(內容))throw new Error('紀錄格式錯誤');資料={...內容,classes:內容.classes||[],lessonDays:內容.lessonDays||{},meals:內容.meals||{}};}
-      else{資料=合併來源();保存();}
+      if(原){const 內容=JSON.parse(原);if(!資料有效(內容))throw new Error('紀錄格式錯誤');資料={...內容,classes:內容.classes||[],lessonDays:內容.lessonDays||{},meals:內容.meals||{},tasks:內容.tasks||{}};if(!資料.students.length){try{資料=合併來源();保存();}catch{}}}
+      else{try{資料=合併來源();}catch{資料=空資料();}保存();}
     }else{
       const {data,error}=await 驗證服務.from('classroom_workspaces').select('data').eq('workspace_key','taisho-main').maybeSingle();
       if(error)throw error;
       const 雲端資料=data?.data;
       if(雲端資料 && 資料有效(雲端資料)){
-        資料={...雲端資料,classes:雲端資料.classes||[],lessonDays:雲端資料.lessonDays||{},meals:雲端資料.meals||{}};
+        資料={...雲端資料,classes:雲端資料.classes||[],lessonDays:雲端資料.lessonDays||{},meals:雲端資料.meals||{},tasks:雲端資料.tasks||{}};
         localStorage.setItem(儲存鍵,JSON.stringify(資料));
       }else{
         let 本機資料=null;
@@ -2280,15 +2462,40 @@ async function 載入(使用者編號){
           const 原=localStorage.getItem(鍵);if(!原)continue;
           try{const 內容=JSON.parse(原);if(資料有效(內容)){本機資料=內容;break;}}catch{}
         }
-        資料=本機資料?{...本機資料,classes:本機資料.classes||[],lessonDays:本機資料.lessonDays||{},meals:本機資料.meals||{}}:合併來源();
+        資料=本機資料?{...本機資料,classes:本機資料.classes||[],lessonDays:本機資料.lessonDays||{},meals:本機資料.meals||{},tasks:本機資料.tasks||{}}:合併來源();
         localStorage.setItem(儲存鍵,JSON.stringify(資料));
         await 同步雲端(使用者編號,資料);
       }
     }
-  }catch{允許儲存=false;雲端使用者='';取得('save-state').textContent='無法讀取雲端資料';通知('雲端資料無法讀取，請檢查網路或 Supabase 設定。');throw new Error('雲端資料載入失敗');}
+  }catch{
+    // 網址直入模式不能因雲端暫時斷線而卡在登入畫面，先使用本機資料。
+    if(免登入模式){
+      try{
+        let 本機資料=null;
+        for(const 鍵 of [儲存鍵,'小日常班級紀錄第一版']){const 原=localStorage.getItem(鍵);if(!原)continue;try{const 內容=JSON.parse(原);if(資料有效(內容)){本機資料=內容;break;}}catch{}}
+        資料=本機資料?{...本機資料,classes:本機資料.classes||[],lessonDays:本機資料.lessonDays||{},meals:本機資料.meals||{},tasks:本機資料.tasks||{}}:(()=>{try{return 合併來源();}catch{return 空資料();}})();
+        允許儲存=true;雲端使用者='';資料.tasks ||= {};localStorage.setItem(儲存鍵,JSON.stringify(資料));
+        取得('save-state').textContent='本機已開啟・雲端待連線';通知('雲端暫時無法連線，已先開啟本機資料；恢復網路後可重新整理同步。');顯示名單();
+        return;
+      }catch{}
+    }
+    允許儲存=false;雲端使用者='';取得('save-state').textContent='無法讀取雲端資料';通知('雲端資料無法讀取，請檢查網路或 Supabase 設定。');throw new Error('雲端資料載入失敗');
+  }
   顯示名單();
 }
-return {載入,清空};
+async function 讀取雲端(使用者編號){
+  if(!驗證服務)return false;
+  const {data,error}=await 驗證服務.from('classroom_workspaces').select('data').eq('workspace_key','taisho-main').maybeSingle();
+  if(error)throw error;
+  const 雲端資料=data?.data;
+  if(!雲端資料 || !資料有效(雲端資料))return false;
+  資料={...雲端資料,classes:雲端資料.classes||[],lessonDays:雲端資料.lessonDays||{},meals:雲端資料.meals||{},tasks:雲端資料.tasks||{}};
+  允許儲存=true;雲端使用者=使用者編號;
+  localStorage.setItem(儲存鍵,JSON.stringify(資料));
+  顯示名單();
+  return true;
+}
+return {載入,清空,讀取雲端};
 }
 
 

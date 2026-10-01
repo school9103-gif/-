@@ -131,3 +131,38 @@
 .meal-select.good{color:#287d65;background-color:#eaf5ee;border-color:#cce4d7}
 .meal-select.cancelled{color:#777;background-color:#f1f2f2;border-color:#dedede}
 .meal-select:disabled{opacity:.5;cursor:not-allowed}
+
+/* 安親作業逐項勾選 */
+.homework-items{display:grid;gap:8px;margin:16px 0}
+.homework-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #d9e3dd;border-radius:8px;background:#fbfdfc}
+.homework-item input{width:18px;height:18px;margin:0;accent-color:#287d67}
+#build-homework-items,#homework-all{margin-top:10px}
+/* 安親今日任務與逾期提醒 */
+.task-reminder{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 24px 18px;padding:12px 14px;border:1px solid #f0dcae;border-radius:10px;background:#fff8e8;color:#765b20;font-size:13px;line-height:1.6}
+.task-reminder[hidden]{display:none}
+.task-reminder strong{color:#8d681a}.task-reminder-row{display:flex;align-items:center;gap:8px;flex:1 1 100%}.task-reminder-row span{flex:1}.task-reminder-check{width:17px;height:17px;margin:0;accent-color:#287d67;flex:0 0 auto}
+.task-reminder button{padding:6px 10px;font-size:12px;background:#fff;border-color:#e8d39d}
+.task-target-heading{display:flex;justify-content:space-between;align-items:center;margin-top:22px;font-size:14px}
+.task-target-heading button{padding:6px 9px;font-size:12px}
+.task-targets{display:grid;gap:7px;max-height:260px;overflow:auto;margin-top:9px;padding:9px;border:1px solid #d9e3dd;border-radius:8px;background:#fbfdfc}
+.task-target{display:flex;align-items:center;gap:8px;margin:0;padding:8px;border-radius:7px;cursor:pointer}
+.task-target:hover{background:#edf5f1}
+.task-target input{width:17px;height:17px;margin:0;accent-color:#287d67}
+@media(max-width:800px){.task-reminder{margin-inline:14px}.task-targets{max-height:220px}}.task-button{background:#18756a;color:white;border-color:#18756a;font-weight:700;white-space:nowrap}
+.task-button:hover{background:#105e55;border-color:#105e55}
+@media(max-width:800px){.task-button{width:100%}}.task-subject-field{margin:20px 0 0;padding:12px;border:1px solid #d9e3dd;border-radius:10px;background:#fbfdfc}
+.task-subject-field legend{padding:0 6px;font-size:14px;font-weight:700;color:#46675d}
+.task-subject-row{display:grid;grid-template-columns:auto 52px 1fr;align-items:center;gap:8px;margin:7px 0}
+.task-subject-row label{margin:0;display:flex;align-items:center;gap:6px;cursor:pointer}
+.task-subject-row input[type="checkbox"]{width:17px;height:17px;margin:0;accent-color:#287d67}
+.task-subject-row input[type="text"]{padding:9px 10px}
+.task-subject-row input[type="text"]:disabled{background:#f1f3f2;color:#9aa7a1}.score-stack{display:grid;gap:5px;min-width:120px}
+.score-entry{display:flex;align-items:center;gap:5px;margin:0;font-size:11px;color:#71837a;white-space:nowrap}
+.score-entry .exam-score{width:82px;min-height:32px;padding:6px 8px}
+.meal-unavailable{display:inline-block;padding:9px 10px;border-radius:8px;color:#9b9188;background:#f4f1ee;font-size:13px;white-space:nowrap}
+
+.form-help{display:block;margin:-4px 0 8px;color:#8b9690;font-size:12px;line-height:1.6}
+.roster-student.inactive{opacity:.65}
+
+.student-end-actions{display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 8px}
+.student-end-actions button{font-size:12px;padding:6px 10px}
